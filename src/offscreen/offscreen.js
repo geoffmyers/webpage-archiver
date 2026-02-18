@@ -3,50 +3,51 @@
 /**
  * Offscreen document: stitches viewport screenshots and generates PDFs.
  *
+ * Uses a dedicated port connection (not runtime.sendMessage) to avoid
+ * message routing conflicts with the popup's onMessage listener in MV3.
+ *
  * Message types:
  *   'stitch-screenshots' — combine viewport captures into a single tall PNG
+ *   'cache-screenshot'   — cache a single-viewport screenshot for PDF use
  *   'generate-pdf'       — convert a full-page screenshot into a multi-page PDF
  */
 
 // Cache the last stitched screenshot so generate-pdf doesn't need it re-sent
 let cachedScreenshotDataUrl = null;
 
-chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type === 'stitch-screenshots') {
-    stitchScreenshots(msg)
-      .then((dataUrl) => {
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== 'offscreen') return;
+
+  port.onMessage.addListener(async (msg) => {
+    try {
+      if (msg.type === 'stitch-screenshots') {
+        const dataUrl = await stitchScreenshots(msg);
         cachedScreenshotDataUrl = dataUrl;
-        sendResponse({ dataUrl });
-      })
-      .catch((err) => sendResponse({ error: err.message }));
-    return true;
-  }
+        port.postMessage({ id: msg.id, dataUrl });
+        return;
+      }
 
-  if (msg.type === 'cache-screenshot') {
-    cachedScreenshotDataUrl = msg.dataUrl;
-    sendResponse({ ok: true });
-    return false;
-  }
+      if (msg.type === 'cache-screenshot') {
+        cachedScreenshotDataUrl = msg.dataUrl;
+        port.postMessage({ id: msg.id, ok: true });
+        return;
+      }
 
-  if (msg.type === 'generate-pdf') {
-    // Use cached screenshot (avoids re-sending large data URL via message)
-    const resolved = { ...msg };
-    if (!resolved.imageDataUrl && cachedScreenshotDataUrl) {
-      resolved.imageDataUrl = cachedScreenshotDataUrl;
-    }
-    generatePdf(resolved)
-      .then((pdfDataUrl) => {
-        cachedScreenshotDataUrl = null; // Free memory
-        sendResponse({ pdfDataUrl });
-      })
-      .catch((err) => {
+      if (msg.type === 'generate-pdf') {
+        const resolved = { ...msg };
+        if (!resolved.imageDataUrl && cachedScreenshotDataUrl) {
+          resolved.imageDataUrl = cachedScreenshotDataUrl;
+        }
+        const pdfDataUrl = await generatePdf(resolved);
         cachedScreenshotDataUrl = null;
-        sendResponse({ error: err.message });
-      });
-    return true;
-  }
-
-  return false;
+        port.postMessage({ id: msg.id, pdfDataUrl });
+        return;
+      }
+    } catch (err) {
+      cachedScreenshotDataUrl = null;
+      port.postMessage({ id: msg.id, error: err.message });
+    }
+  });
 });
 
 // ─── Screenshot Stitching ─────────────────────────────────────────────────────

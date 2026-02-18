@@ -53,28 +53,54 @@ async function buildFilename(pageTitle, pageUrl, ext) {
 }
 
 // ─── Offscreen document management ───────────────────────────────────────────
+// Uses a dedicated port (not runtime.sendMessage) to avoid message routing
+// conflicts with the popup's onMessage listener in MV3.
 
 let offscreenCreating = null;
+let offscreenPort = null;
+let msgIdCounter = 0;
 
 async function ensureOffscreenDocument() {
   const existingContexts = await chrome.runtime.getContexts({
     contextTypes: ['OFFSCREEN_DOCUMENT'],
     documentUrls: [chrome.runtime.getURL('src/offscreen/offscreen.html')],
   });
-  if (existingContexts.length > 0) return;
 
-  if (offscreenCreating) {
-    await offscreenCreating;
-    return;
+  if (existingContexts.length === 0) {
+    if (offscreenCreating) {
+      await offscreenCreating;
+    } else {
+      offscreenCreating = chrome.offscreen.createDocument({
+        url: 'src/offscreen/offscreen.html',
+        reasons: ['DOM_PARSER'],
+        justification: 'Stitch screenshots and generate PDF from captured page content',
+      });
+      await offscreenCreating;
+      offscreenCreating = null;
+    }
   }
 
-  offscreenCreating = chrome.offscreen.createDocument({
-    url: 'src/offscreen/offscreen.html',
-    reasons: ['DOM_PARSER'],
-    justification: 'Stitch screenshots and generate PDF from captured page content',
+  if (!offscreenPort) {
+    offscreenPort = chrome.runtime.connect({ name: 'offscreen' });
+    offscreenPort.onDisconnect.addListener(() => { offscreenPort = null; });
+  }
+}
+
+function sendOffscreenMessage(msg) {
+  return new Promise((resolve, reject) => {
+    const id = ++msgIdCounter;
+    const handler = (response) => {
+      if (response.id !== id) return;
+      offscreenPort.onMessage.removeListener(handler);
+      if (response.error) {
+        reject(new Error(response.error));
+      } else {
+        resolve(response);
+      }
+    };
+    offscreenPort.onMessage.addListener(handler);
+    offscreenPort.postMessage({ ...msg, id });
   });
-  await offscreenCreating;
-  offscreenCreating = null;
 }
 
 // ─── Progress reporting ─────────────────────────────────────────────────────
@@ -113,7 +139,7 @@ async function captureFullPageScreenshot(tabId) {
     const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
     // Cache in offscreen doc so generate-pdf can use it without re-sending
     await ensureOffscreenDocument();
-    await chrome.runtime.sendMessage({ type: 'cache-screenshot', dataUrl });
+    await sendOffscreenMessage({ type: 'cache-screenshot', dataUrl });
     return {
       png: dataUrl,
       pageWidth: viewportWidth,
@@ -146,7 +172,7 @@ async function captureFullPageScreenshot(tabId) {
 
   // Stitch captures together in the offscreen document
   await ensureOffscreenDocument();
-  const stitchResponse = await chrome.runtime.sendMessage({
+  const stitchResponse = await sendOffscreenMessage({
     type: 'stitch-screenshots',
     captures,
     viewportWidth,
@@ -155,10 +181,6 @@ async function captureFullPageScreenshot(tabId) {
     devicePixelRatio,
     scrollPositions,
   });
-
-  if (stitchResponse.error) {
-    throw new Error(stitchResponse.error);
-  }
 
   return {
     png: stitchResponse.dataUrl,
@@ -300,7 +322,7 @@ async function archivePage(formats) {
       await ensureOffscreenDocument();
       // Don't send imageDataUrl here — it's already cached in the offscreen doc
       // from either stitch-screenshots or cache-screenshot
-      const pdfResponse = await chrome.runtime.sendMessage({
+      const pdfResponse = await sendOffscreenMessage({
         type: 'generate-pdf',
         imageDataUrl: null,
         pageTitle,
@@ -309,12 +331,12 @@ async function archivePage(formats) {
         pageHeight: screenshotData?.pageHeight || 0,
       });
 
-      if (pdfResponse && pdfResponse.pdfDataUrl) {
+      if (pdfResponse.pdfDataUrl) {
         const filename = await buildFilename(pageTitle, pageUrl, 'pdf');
         await downloadDataUrl(pdfResponse.pdfDataUrl, filename);
         results.push({ label: `PDF — ${filename}`, success: true });
       } else {
-        results.push({ label: `PDF — ${pdfResponse?.error || 'generation failed'}`, success: false });
+        results.push({ label: 'PDF — generation failed', success: false });
       }
     } catch (err) {
       results.push({ label: `PDF — ${err.message}`, success: false });
