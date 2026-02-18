@@ -73,7 +73,6 @@ test.describe('Extension Structure', () => {
   test('all source files referenced by service worker exist', () => {
     const injectedFiles = [
       'vendor/Readability.js',
-      'vendor/html2canvas.min.js',
       'vendor/turndown.umd.js',
       'vendor/turndown-plugin-gfm.js',
       'src/content/content-script.js',
@@ -144,15 +143,30 @@ test.describe('Source Code Quality', () => {
     expect(code).toContain('__webpageArchiverInjected');
   });
 
-  test('content script handles all capture formats', () => {
+  test('content script handles text capture and scroll messages', () => {
     const code = fs.readFileSync(
       path.join(EXTENSION_PATH, 'src/content/content-script.js'),
       'utf-8'
     );
     expect(code).toContain('formats.html');
     expect(code).toContain('formats.markdown');
-    expect(code).toContain('formats.png');
-    expect(code).toContain('formats.pdf');
+    expect(code).toContain("msg.type === 'capture'");
+    expect(code).toContain("msg.type === 'get-page-dimensions'");
+    expect(code).toContain("msg.type === 'scroll-to'");
+  });
+
+  test('content script provides page dimension helpers', () => {
+    const code = fs.readFileSync(
+      path.join(EXTENSION_PATH, 'src/content/content-script.js'),
+      'utf-8'
+    );
+    expect(code).toContain('getPageDimensions');
+    expect(code).toContain('scrollToPosition');
+    expect(code).toContain('scrollWidth');
+    expect(code).toContain('scrollHeight');
+    expect(code).toContain('viewportWidth');
+    expect(code).toContain('viewportHeight');
+    expect(code).toContain('devicePixelRatio');
   });
 
   test('service worker handles archive messages', () => {
@@ -175,14 +189,36 @@ test.describe('Source Code Quality', () => {
     expect(code).toContain('Cannot archive browser internal pages');
   });
 
-  test('offscreen document handles generate-pdf messages', () => {
+  test('service worker uses captureVisibleTab for screenshots', () => {
+    const code = fs.readFileSync(
+      path.join(EXTENSION_PATH, 'src/background/service-worker.js'),
+      'utf-8'
+    );
+    expect(code).toContain('captureFullPageScreenshot');
+    expect(code).toContain('chrome.tabs.captureVisibleTab');
+    expect(code).toContain('get-page-dimensions');
+    expect(code).toContain('scroll-to');
+    expect(code).toContain('stitch-screenshots');
+  });
+
+  test('offscreen document handles both stitch and PDF messages', () => {
     const code = fs.readFileSync(
       path.join(EXTENSION_PATH, 'src/offscreen/offscreen.js'),
       'utf-8'
     );
-    expect(code).toContain("msg.type !== 'generate-pdf'");
+    expect(code).toContain("msg.type === 'stitch-screenshots'");
+    expect(code).toContain("msg.type === 'generate-pdf'");
+    expect(code).toContain('stitchScreenshots');
     expect(code).toContain('generatePdf');
     expect(code).toContain('jsPDF');
+  });
+
+  test('offscreen stitching caps canvas height at 32000px', () => {
+    const code = fs.readFileSync(
+      path.join(EXTENSION_PATH, 'src/offscreen/offscreen.js'),
+      'utf-8'
+    );
+    expect(code).toContain('32000');
   });
 
   test('markdown extraction builds YAML frontmatter', () => {
@@ -255,14 +291,6 @@ test.describe('Source Code Quality', () => {
     expect(code).toContain('sanitizeFilename');
     // Checks for path traversal, special chars
     expect(code).toContain('[<>:"/\\\\|?*\\x00-\\x1f]');
-  });
-
-  test('html2canvas screenshot caps height at 32000px', () => {
-    const code = fs.readFileSync(
-      path.join(EXTENSION_PATH, 'src/content/content-script.js'),
-      'utf-8'
-    );
-    expect(code).toContain('32000');
   });
 });
 
@@ -470,11 +498,9 @@ test.describe('Extension Loading in Browser', () => {
     const title = await page.title();
     expect(title).toContain('Example Domain');
 
-    // Inject vendor libraries (content-script.js is skipped because it
-    // references chrome.runtime which is only available in true content script contexts)
+    // Inject vendor libraries used by the content script
     const vendorFiles = [
       'vendor/Readability.js',
-      'vendor/html2canvas.min.js',
       'vendor/turndown.umd.js',
       'vendor/turndown-plugin-gfm.js',
     ];
@@ -487,13 +513,11 @@ test.describe('Extension Loading in Browser', () => {
     // Verify all vendor globals are available
     const globals = await page.evaluate(() => ({
       Readability: typeof Readability !== 'undefined',
-      html2canvas: typeof html2canvas !== 'undefined',
       TurndownService: typeof TurndownService !== 'undefined',
       turndownPluginGfm: typeof turndownPluginGfm !== 'undefined',
     }));
 
     expect(globals.Readability).toBe(true);
-    expect(globals.html2canvas).toBe(true);
     expect(globals.TurndownService).toBe(true);
     expect(globals.turndownPluginGfm).toBe(true);
 
@@ -570,47 +594,9 @@ test.describe('Extension Loading in Browser', () => {
     await page.close();
   });
 
-  test('html2canvas can capture a screenshot', async () => {
-    const page = await context.newPage();
-    await page.goto('https://example.com', { waitUntil: 'domcontentloaded' });
-
-    // Inject html2canvas
-    const h2cCode = fs.readFileSync(
-      path.join(EXTENSION_PATH, 'vendor/html2canvas.min.js'),
-      'utf-8'
-    );
-    await page.evaluate(h2cCode);
-
-    const screenshot = await page.evaluate(async () => {
-      const canvas = await html2canvas(document.body, {
-        useCORS: true,
-        allowTaint: true,
-        scale: 1,
-        logging: false,
-      });
-      return {
-        width: canvas.width,
-        height: canvas.height,
-        dataUrlPrefix: canvas.toDataURL('image/png').substring(0, 30),
-      };
-    });
-
-    expect(screenshot.width).toBeGreaterThan(0);
-    expect(screenshot.height).toBeGreaterThan(0);
-    expect(screenshot.dataUrlPrefix).toContain('data:image/png;base64');
-
-    await page.close();
-  });
-
   test('HTML serialization produces valid self-contained HTML', async () => {
     const page = await context.newPage();
     await page.goto('https://example.com', { waitUntil: 'domcontentloaded' });
-
-    // Inject content script functions manually (can't use chrome.runtime in page context)
-    const contentCode = fs.readFileSync(
-      path.join(EXTENSION_PATH, 'src/content/content-script.js'),
-      'utf-8'
-    );
 
     // Execute the serialization functions directly
     const html = await page.evaluate(() => {

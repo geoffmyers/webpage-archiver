@@ -6,8 +6,9 @@
  * Flow:
  *   popup sends { type: 'archive', formats: [...] }
  *     → inject content script into active tab
- *     → content script returns captured data per format
- *     → for PDF: open offscreen document, render, get blob
+ *     → content script returns captured data per format (HTML, Markdown)
+ *     → for PNG: scroll page + captureVisibleTab → stitch in offscreen doc
+ *     → for PDF: open offscreen document, render from stitched PNG
  *     → download all files via chrome.downloads
  */
 
@@ -70,7 +71,7 @@ async function ensureOffscreenDocument() {
   offscreenCreating = chrome.offscreen.createDocument({
     url: 'src/offscreen/offscreen.html',
     reasons: ['DOM_PARSER'],
-    justification: 'Generate PDF from captured page content',
+    justification: 'Stitch screenshots and generate PDF from captured page content',
   });
   await offscreenCreating;
   offscreenCreating = null;
@@ -79,7 +80,6 @@ async function ensureOffscreenDocument() {
 // ─── Progress reporting ─────────────────────────────────────────────────────
 
 async function reportProgress(percent, label) {
-  // Send to popup (may not be open — that's fine, it won't error)
   try {
     await chrome.runtime.sendMessage({ type: 'archive-progress', percent, label });
   } catch {
@@ -94,7 +94,6 @@ async function injectContentScript(tabId) {
     target: { tabId },
     files: [
       'vendor/Readability.js',
-      'vendor/html2canvas.min.js',
       'vendor/turndown.umd.js',
       'vendor/turndown-plugin-gfm.js',
       'src/content/content-script.js',
@@ -102,7 +101,70 @@ async function injectContentScript(tabId) {
   });
 }
 
-// ─── Download helper ─────────────────────────────────────────────────────────
+// ─── Full-page screenshot via scroll + captureVisibleTab ─────────────────────
+
+async function captureFullPageScreenshot(tabId) {
+  // Get page dimensions from content script
+  const dims = await chrome.tabs.sendMessage(tabId, { type: 'get-page-dimensions' });
+  const { scrollHeight, viewportWidth, viewportHeight, devicePixelRatio } = dims;
+
+  // Short-circuit: if page fits in one viewport, just capture once
+  if (scrollHeight <= viewportHeight) {
+    const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+    return {
+      png: dataUrl,
+      pageWidth: viewportWidth,
+      pageHeight: scrollHeight,
+    };
+  }
+
+  // Scroll through the page, capturing each viewport
+  const captures = [];
+  const scrollPositions = [];
+  let currentY = 0;
+
+  while (currentY < scrollHeight) {
+    // Scroll to position
+    const pos = await chrome.tabs.sendMessage(tabId, { type: 'scroll-to', y: currentY });
+
+    // Small delay to let rendering settle after scroll
+    await new Promise((r) => setTimeout(r, 150));
+
+    // Capture the visible viewport
+    const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+    captures.push(dataUrl);
+    scrollPositions.push(pos.scrollY);
+
+    currentY += viewportHeight;
+  }
+
+  // Scroll back to top
+  await chrome.tabs.sendMessage(tabId, { type: 'scroll-to', y: 0 });
+
+  // Stitch captures together in the offscreen document
+  await ensureOffscreenDocument();
+  const stitchResponse = await chrome.runtime.sendMessage({
+    type: 'stitch-screenshots',
+    captures,
+    viewportWidth,
+    viewportHeight,
+    totalHeight: scrollHeight,
+    devicePixelRatio,
+    scrollPositions,
+  });
+
+  if (stitchResponse.error) {
+    throw new Error(stitchResponse.error);
+  }
+
+  return {
+    png: stitchResponse.dataUrl,
+    pageWidth: viewportWidth,
+    pageHeight: scrollHeight,
+  };
+}
+
+// ─── Download helpers ────────────────────────────────────────────────────────
 
 function downloadDataUrl(dataUrl, filename) {
   return new Promise((resolve, reject) => {
@@ -147,7 +209,7 @@ async function archivePage(formats) {
   await reportProgress(5, 'Injecting content script...');
   await injectContentScript(tab.id);
 
-  // Request captures from the content script
+  // Request text captures from the content script (HTML, Markdown)
   const needsHtml = formats.includes('html');
   const needsPng = formats.includes('png');
   const needsMarkdown = formats.includes('markdown');
@@ -157,7 +219,7 @@ async function archivePage(formats) {
 
   const captureResponse = await chrome.tabs.sendMessage(tab.id, {
     type: 'capture',
-    formats: { html: needsHtml, png: needsPng, markdown: needsMarkdown, pdf: needsPdf },
+    formats: { html: needsHtml, png: false, markdown: needsMarkdown, pdf: false },
     pageUrl,
     pageTitle,
   });
@@ -166,12 +228,23 @@ async function archivePage(formats) {
     throw new Error(captureResponse.error);
   }
 
+  // Capture full-page screenshot if needed (for PNG and/or PDF)
+  let screenshotData = null;
+  if (needsPng || needsPdf) {
+    await reportProgress(30, 'Capturing full-page screenshot...');
+    try {
+      screenshotData = await captureFullPageScreenshot(tab.id);
+    } catch (err) {
+      console.warn('Webpage Archiver: screenshot capture failed', err);
+    }
+  }
+
   // Process each format
-  const stepSize = 75 / totalSteps; // 15% already used, leave 10% for final
+  const stepSize = 50 / totalSteps;
 
   // HTML
   if (needsHtml && captureResponse.html) {
-    await reportProgress(15 + stepSize * completedSteps, 'Saving HTML archive...');
+    await reportProgress(40 + stepSize * completedSteps, 'Saving HTML archive...');
     try {
       const filename = await buildFilename(pageTitle, pageUrl, 'html');
       await downloadText(captureResponse.html, filename, 'text/html');
@@ -187,7 +260,7 @@ async function archivePage(formats) {
 
   // Markdown
   if (needsMarkdown && captureResponse.markdown) {
-    await reportProgress(15 + stepSize * completedSteps, 'Saving Markdown...');
+    await reportProgress(40 + stepSize * completedSteps, 'Saving Markdown...');
     try {
       const filename = await buildFilename(pageTitle, pageUrl, 'md');
       await downloadText(captureResponse.markdown, filename, 'text/markdown');
@@ -202,11 +275,11 @@ async function archivePage(formats) {
   }
 
   // PNG
-  if (needsPng && captureResponse.png) {
-    await reportProgress(15 + stepSize * completedSteps, 'Saving screenshot...');
+  if (needsPng && screenshotData?.png) {
+    await reportProgress(40 + stepSize * completedSteps, 'Saving screenshot...');
     try {
       const filename = await buildFilename(pageTitle, pageUrl, 'png');
-      await downloadDataUrl(captureResponse.png, filename);
+      await downloadDataUrl(screenshotData.png, filename);
       results.push({ label: `PNG — ${filename}`, success: true });
     } catch (err) {
       results.push({ label: `PNG — ${err.message}`, success: false });
@@ -219,16 +292,16 @@ async function archivePage(formats) {
 
   // PDF
   if (needsPdf) {
-    await reportProgress(15 + stepSize * completedSteps, 'Generating PDF...');
+    await reportProgress(40 + stepSize * completedSteps, 'Generating PDF...');
     try {
       await ensureOffscreenDocument();
       const pdfResponse = await chrome.runtime.sendMessage({
         type: 'generate-pdf',
-        imageDataUrl: captureResponse.png,
+        imageDataUrl: screenshotData?.png || null,
         pageTitle,
         pageUrl,
-        pageWidth: captureResponse.pageWidth,
-        pageHeight: captureResponse.pageHeight,
+        pageWidth: screenshotData?.pageWidth || 0,
+        pageHeight: screenshotData?.pageHeight || 0,
       });
 
       if (pdfResponse && pdfResponse.pdfDataUrl) {

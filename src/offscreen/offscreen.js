@@ -1,56 +1,114 @@
 'use strict';
 
 /**
- * Offscreen document: generates PDFs using jsPDF.
+ * Offscreen document: stitches viewport screenshots and generates PDFs.
  *
- * Receives { type: 'generate-pdf', imageDataUrl, pageTitle, pageUrl, pageWidth, pageHeight }
- * Returns  { type: 'pdf-result', pdfDataUrl } or { type: 'pdf-result', error }
+ * Message types:
+ *   'stitch-screenshots' — combine viewport captures into a single tall PNG
+ *   'generate-pdf'       — convert a full-page screenshot into a multi-page PDF
  */
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg.type !== 'generate-pdf') return false;
+  if (msg.type === 'stitch-screenshots') {
+    stitchScreenshots(msg)
+      .then((dataUrl) => sendResponse({ dataUrl }))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
 
-  generatePdf(msg)
-    .then((pdfDataUrl) => sendResponse({ pdfDataUrl }))
-    .catch((err) => sendResponse({ error: err.message }));
+  if (msg.type === 'generate-pdf') {
+    generatePdf(msg)
+      .then((pdfDataUrl) => sendResponse({ pdfDataUrl }))
+      .catch((err) => sendResponse({ error: err.message }));
+    return true;
+  }
 
-  return true; // Async response
+  return false;
 });
+
+// ─── Screenshot Stitching ─────────────────────────────────────────────────────
+
+/**
+ * Stitch multiple viewport-sized captures into one tall image.
+ *
+ * @param {Object} params
+ * @param {string[]} params.captures - Array of data URLs (one per viewport)
+ * @param {number} params.viewportWidth - CSS viewport width
+ * @param {number} params.viewportHeight - CSS viewport height
+ * @param {number} params.totalHeight - Total scrollable page height
+ * @param {number} params.devicePixelRatio - Device pixel ratio
+ * @param {number[]} params.scrollPositions - Actual scrollY for each capture
+ */
+async function stitchScreenshots({
+  captures,
+  viewportWidth,
+  viewportHeight,
+  totalHeight,
+  devicePixelRatio,
+  scrollPositions,
+}) {
+  const dpr = devicePixelRatio || 1;
+  const canvasWidth = Math.round(viewportWidth * dpr);
+  const canvasHeight = Math.round(totalHeight * dpr);
+
+  // Cap at 32000px (canvas limit in most browsers)
+  const cappedHeight = Math.min(canvasHeight, 32000);
+
+  const canvas = new OffscreenCanvas(canvasWidth, cappedHeight);
+  const ctx = canvas.getContext('2d');
+
+  for (let i = 0; i < captures.length; i++) {
+    const img = await loadImage(captures[i]);
+    const destY = Math.round(scrollPositions[i] * dpr);
+
+    // For the last capture, we may need to only draw the remaining portion
+    const remainingHeight = cappedHeight - destY;
+    if (remainingHeight <= 0) break;
+
+    const drawHeight = Math.min(img.height, remainingHeight);
+    ctx.drawImage(img, 0, 0, img.width, drawHeight, 0, destY, img.width, drawHeight);
+  }
+
+  const blob = await canvas.convertToBlob({ type: 'image/png' });
+  return blobToDataUrl(blob);
+}
+
+function loadImage(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error('Failed to load image'));
+    img.src = dataUrl;
+  });
+}
+
+// ─── PDF Generation ───────────────────────────────────────────────────────────
 
 async function generatePdf({ imageDataUrl, pageTitle, pageUrl, pageWidth, pageHeight }) {
   const { jsPDF } = window.jspdf;
 
   if (!imageDataUrl) {
-    // No screenshot available — generate a simple text-based PDF
     return generateTextPdf(jsPDF, pageTitle, pageUrl);
   }
 
-  // Load the screenshot image
-  const img = new Image();
-  await new Promise((resolve, reject) => {
-    img.onload = resolve;
-    img.onerror = () => reject(new Error('Failed to load screenshot for PDF'));
-    img.src = imageDataUrl;
-  });
-
+  const img = await loadImage(imageDataUrl);
   const imgWidth = img.naturalWidth;
   const imgHeight = img.naturalHeight;
 
   // Use A4-width as reference, scale height proportionally
-  const pdfWidthMm = 210; // A4 width
+  const pdfWidthMm = 210;
   const pdfHeightMm = (imgHeight / imgWidth) * pdfWidthMm;
 
   // Split into pages if the image is very tall
-  const maxPageHeightMm = 297; // A4 height
+  const maxPageHeightMm = 297;
   const totalPages = Math.ceil(pdfHeightMm / maxPageHeightMm);
 
   const doc = new jsPDF({
-    orientation: pdfHeightMm > pdfWidthMm && totalPages === 1 ? 'portrait' : 'portrait',
+    orientation: 'portrait',
     unit: 'mm',
     format: totalPages === 1 ? [pdfWidthMm, pdfHeightMm] : 'a4',
   });
 
-  // Add metadata
   doc.setProperties({
     title: pageTitle,
     subject: `Archived from ${pageUrl}`,
@@ -58,24 +116,20 @@ async function generatePdf({ imageDataUrl, pageTitle, pageUrl, pageWidth, pageHe
   });
 
   if (totalPages === 1) {
-    // Single page — full image
     doc.addImage(imageDataUrl, 'PNG', 0, 0, pdfWidthMm, pdfHeightMm);
   } else {
-    // Multi-page: tile the image across pages
     const pageHeightPx = (maxPageHeightMm / pdfWidthMm) * imgWidth;
 
     for (let page = 0; page < totalPages; page++) {
       if (page > 0) doc.addPage();
 
-      // Calculate the portion of the image for this page
       const srcY = page * pageHeightPx;
       const srcH = Math.min(pageHeightPx, imgHeight - srcY);
       const destH = (srcH / imgWidth) * pdfWidthMm;
 
-      // Create a canvas for this page slice
-      const sliceCanvas = new OffscreenCanvas(imgWidth, srcH);
+      const sliceCanvas = new OffscreenCanvas(imgWidth, Math.round(srcH));
       const ctx = sliceCanvas.getContext('2d');
-      ctx.drawImage(img, 0, srcY, imgWidth, srcH, 0, 0, imgWidth, srcH);
+      ctx.drawImage(img, 0, srcY, imgWidth, srcH, 0, 0, imgWidth, Math.round(srcH));
 
       const sliceBlob = await sliceCanvas.convertToBlob({ type: 'image/png' });
       const sliceDataUrl = await blobToDataUrl(sliceBlob);

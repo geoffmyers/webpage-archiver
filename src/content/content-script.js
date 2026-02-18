@@ -19,13 +19,24 @@ if (!window.__webpageArchiverInjected) {
   window.__webpageArchiverInjected = true;
 
   chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-    if (msg.type !== 'capture') return false;
+    if (msg.type === 'capture') {
+      capturePage(msg.formats, msg.pageUrl, msg.pageTitle)
+        .then(sendResponse)
+        .catch((err) => sendResponse({ error: err.message }));
+      return true;
+    }
 
-    capturePage(msg.formats, msg.pageUrl, msg.pageTitle)
-      .then(sendResponse)
-      .catch((err) => sendResponse({ error: err.message }));
+    if (msg.type === 'get-page-dimensions') {
+      sendResponse(getPageDimensions());
+      return false;
+    }
 
-    return true; // Async response
+    if (msg.type === 'scroll-to') {
+      sendResponse(scrollToPosition(msg.y));
+      return false;
+    }
+
+    return false;
   });
 }
 
@@ -52,16 +63,6 @@ async function capturePage(formats, pageUrl, pageTitle) {
     } catch (err) {
       console.warn('Webpage Archiver: Markdown extraction failed', err);
       result.markdown = null;
-    }
-  }
-
-  // PNG screenshot (full page via html2canvas)
-  if (formats.png || formats.pdf) {
-    try {
-      result.png = await captureScreenshot();
-    } catch (err) {
-      console.warn('Webpage Archiver: PNG capture failed', err);
-      result.png = null;
     }
   }
 
@@ -243,25 +244,29 @@ function buildFrontmatter(fields) {
   return lines.join('\n');
 }
 
-// ─── PNG Screenshot ──────────────────────────────────────────────────────────
+// ─── Scroll-based Screenshot Helpers ─────────────────────────────────────────
 
-async function captureScreenshot() {
-  if (typeof html2canvas === 'undefined') {
-    return null;
-  }
+function getPageDimensions() {
+  return {
+    scrollWidth: Math.max(
+      document.documentElement.scrollWidth,
+      document.body.scrollWidth
+    ),
+    scrollHeight: Math.max(
+      document.documentElement.scrollHeight,
+      document.body.scrollHeight
+    ),
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    devicePixelRatio: window.devicePixelRatio || 1,
+  };
+}
 
-  const canvas = await html2canvas(document.body, {
-    useCORS: true,
-    allowTaint: true,
-    scrollX: 0,
-    scrollY: 0,
-    windowWidth: document.documentElement.scrollWidth,
-    windowHeight: document.documentElement.scrollHeight,
-    width: document.documentElement.scrollWidth,
-    height: Math.min(document.documentElement.scrollHeight, 32000), // Canvas size limit
-    scale: 1,
-    logging: false,
-  });
-
-  return canvas.toDataURL('image/png');
+function scrollToPosition(y) {
+  window.scrollTo({ left: 0, top: y, behavior: 'instant' });
+  // Return the actual scroll position (may be clamped)
+  return {
+    scrollX: window.scrollX,
+    scrollY: window.scrollY,
+  };
 }
