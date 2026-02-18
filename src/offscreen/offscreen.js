@@ -7,24 +7,56 @@
  * message routing conflicts with the popup's onMessage listener in MV3.
  *
  * Message types:
- *   'stitch-screenshots' — combine viewport captures into a single tall PNG
+ *   'stitch-init'        — initialize canvas for incremental screenshot stitching
+ *   'stitch-add-capture' — draw one viewport capture onto the stitch canvas
+ *   'stitch-finalize'    — finalize stitch into a PNG blob and return a blob URL
  *   'cache-screenshot'   — cache a single-viewport screenshot for PDF use
  *   'generate-pdf'       — convert a full-page screenshot into a multi-page PDF
+ *   'revoke-blob-url'    — free a blob URL's memory
  */
 
 // Cache the last stitched screenshot blob so generate-pdf can use it directly
 let cachedScreenshotBlob = null;
+
+// Incremental stitch state — captures are sent one at a time to avoid
+// exceeding Chrome's 64 MiB port.postMessage limit.
+let stitchCanvas = null;
+let stitchCtx = null;
+let stitchDpr = 1;
 
 chrome.runtime.onConnect.addListener((port) => {
   if (port.name !== 'offscreen') return;
 
   port.onMessage.addListener(async (msg) => {
     try {
-      if (msg.type === 'stitch-screenshots') {
-        const blob = await stitchScreenshots(msg);
-        // Cache blob for generate-pdf; return a blob URL (tiny string)
-        // so we don't exceed Chrome's 64 MiB message limit.
+      // --- Incremental stitch protocol ---
+      if (msg.type === 'stitch-init') {
+        stitchDpr = msg.devicePixelRatio || 1;
+        const canvasWidth = Math.round(msg.viewportWidth * stitchDpr);
+        const canvasHeight = Math.min(Math.round(msg.totalHeight * stitchDpr), 32000);
+        stitchCanvas = new OffscreenCanvas(canvasWidth, canvasHeight);
+        stitchCtx = stitchCanvas.getContext('2d');
+        port.postMessage({ id: msg.id, ok: true });
+        return;
+      }
+
+      if (msg.type === 'stitch-add-capture') {
+        const img = await loadImage(msg.dataUrl);
+        const destY = Math.round(msg.scrollY * stitchDpr);
+        const remainingHeight = stitchCanvas.height - destY;
+        if (remainingHeight > 0) {
+          const drawHeight = Math.min(img.height, remainingHeight);
+          stitchCtx.drawImage(img, 0, 0, img.width, drawHeight, 0, destY, img.width, drawHeight);
+        }
+        port.postMessage({ id: msg.id, ok: true });
+        return;
+      }
+
+      if (msg.type === 'stitch-finalize') {
+        const blob = await stitchCanvas.convertToBlob({ type: 'image/png' });
         cachedScreenshotBlob = blob;
+        stitchCanvas = null;
+        stitchCtx = null;
         const blobUrl = URL.createObjectURL(blob);
         port.postMessage({ id: msg.id, blobUrl });
         return;
@@ -60,51 +92,7 @@ chrome.runtime.onConnect.addListener((port) => {
   });
 });
 
-// ─── Screenshot Stitching ─────────────────────────────────────────────────────
-
-/**
- * Stitch multiple viewport-sized captures into one tall image.
- *
- * @param {Object} params
- * @param {string[]} params.captures - Array of data URLs (one per viewport)
- * @param {number} params.viewportWidth - CSS viewport width
- * @param {number} params.viewportHeight - CSS viewport height
- * @param {number} params.totalHeight - Total scrollable page height
- * @param {number} params.devicePixelRatio - Device pixel ratio
- * @param {number[]} params.scrollPositions - Actual scrollY for each capture
- */
-async function stitchScreenshots({
-  captures,
-  viewportWidth,
-  viewportHeight,
-  totalHeight,
-  devicePixelRatio,
-  scrollPositions,
-}) {
-  const dpr = devicePixelRatio || 1;
-  const canvasWidth = Math.round(viewportWidth * dpr);
-  const canvasHeight = Math.round(totalHeight * dpr);
-
-  // Cap at 32000px (canvas limit in most browsers)
-  const cappedHeight = Math.min(canvasHeight, 32000);
-
-  const canvas = new OffscreenCanvas(canvasWidth, cappedHeight);
-  const ctx = canvas.getContext('2d');
-
-  for (let i = 0; i < captures.length; i++) {
-    const img = await loadImage(captures[i]);
-    const destY = Math.round(scrollPositions[i] * dpr);
-
-    // For the last capture, we may need to only draw the remaining portion
-    const remainingHeight = cappedHeight - destY;
-    if (remainingHeight <= 0) break;
-
-    const drawHeight = Math.min(img.height, remainingHeight);
-    ctx.drawImage(img, 0, 0, img.width, drawHeight, 0, destY, img.width, drawHeight);
-  }
-
-  return canvas.convertToBlob({ type: 'image/png' });
-}
+// ─── Image Loading ───────────────────────────────────────────────────────────
 
 function loadImage(dataUrl) {
   return new Promise((resolve, reject) => {

@@ -199,17 +199,20 @@ test.describe('Source Code Quality', () => {
     expect(code).toContain('chrome.tabs.captureVisibleTab');
     expect(code).toContain('get-page-dimensions');
     expect(code).toContain('scroll-to');
-    expect(code).toContain('stitch-screenshots');
+    expect(code).toContain('stitch-init');
+    expect(code).toContain('stitch-add-capture');
+    expect(code).toContain('stitch-finalize');
   });
 
-  test('offscreen document handles both stitch and PDF messages', () => {
+  test('offscreen document handles incremental stitch and PDF messages', () => {
     const code = fs.readFileSync(
       path.join(EXTENSION_PATH, 'src/offscreen/offscreen.js'),
       'utf-8'
     );
-    expect(code).toContain("msg.type === 'stitch-screenshots'");
+    expect(code).toContain("msg.type === 'stitch-init'");
+    expect(code).toContain("msg.type === 'stitch-add-capture'");
+    expect(code).toContain("msg.type === 'stitch-finalize'");
     expect(code).toContain("msg.type === 'generate-pdf'");
-    expect(code).toContain('stitchScreenshots');
     expect(code).toContain('generatePdf');
     expect(code).toContain('jsPDF');
   });

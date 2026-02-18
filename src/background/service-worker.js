@@ -7,7 +7,7 @@
  *   popup sends { type: 'archive', formats: [...] }
  *     → inject content script into active tab
  *     → content script returns captured data per format (HTML, Markdown)
- *     → for PNG: scroll page + captureVisibleTab → stitch in offscreen doc
+ *     → for PNG: scroll page + captureVisibleTab → stitch incrementally in offscreen doc
  *     → for PDF: open offscreen document, render from stitched PNG
  *     → download all files via chrome.downloads
  */
@@ -148,11 +148,18 @@ async function captureFullPageScreenshot(tabId) {
     };
   }
 
-  // Scroll through the page, capturing each viewport
-  const captures = [];
-  const scrollPositions = [];
-  let currentY = 0;
+  // Scroll through the page, capturing each viewport.
+  // Captures are sent individually to the offscreen document to avoid
+  // exceeding Chrome's 64 MiB message limit on port.postMessage.
+  await sendOffscreenMessage({
+    type: 'stitch-init',
+    viewportWidth,
+    viewportHeight,
+    totalHeight: scrollHeight,
+    devicePixelRatio,
+  });
 
+  let currentY = 0;
   while (currentY < scrollHeight) {
     // Scroll to position
     const pos = await chrome.tabs.sendMessage(tabId, { type: 'scroll-to', y: currentY });
@@ -160,10 +167,13 @@ async function captureFullPageScreenshot(tabId) {
     // Small delay to let rendering settle after scroll
     await new Promise((r) => setTimeout(r, 150));
 
-    // Capture the visible viewport
+    // Capture the visible viewport and send immediately to offscreen doc
     const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
-    captures.push(dataUrl);
-    scrollPositions.push(pos.scrollY);
+    await sendOffscreenMessage({
+      type: 'stitch-add-capture',
+      dataUrl,
+      scrollY: pos.scrollY,
+    });
 
     currentY += viewportHeight;
   }
@@ -171,17 +181,8 @@ async function captureFullPageScreenshot(tabId) {
   // Scroll back to top
   await chrome.tabs.sendMessage(tabId, { type: 'scroll-to', y: 0 });
 
-  // Stitch captures together in the offscreen document.
-  // Returns a blob URL (not a data URL) to avoid the 64 MiB message limit.
-  const stitchResponse = await sendOffscreenMessage({
-    type: 'stitch-screenshots',
-    captures,
-    viewportWidth,
-    viewportHeight,
-    totalHeight: scrollHeight,
-    devicePixelRatio,
-    scrollPositions,
-  });
+  // Finalize the stitch and get a blob URL back.
+  const stitchResponse = await sendOffscreenMessage({ type: 'stitch-finalize' });
 
   return {
     png: stitchResponse.blobUrl,
