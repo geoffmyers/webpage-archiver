@@ -19,6 +19,10 @@
 // Cache the last stitched screenshot blob so generate-pdf can use it directly
 let cachedScreenshotBlob = null;
 
+// Map blob URLs to their underlying Blob objects so createZip can access
+// them directly without fetch() (which doesn't support blob: URLs reliably).
+const blobUrlMap = new Map();
+
 // Incremental stitch state — captures are sent one at a time to avoid
 // exceeding Chrome's 64 MiB port.postMessage limit.
 let stitchCanvas = null;
@@ -59,6 +63,7 @@ chrome.runtime.onConnect.addListener((port) => {
         stitchCanvas = null;
         stitchCtx = null;
         const blobUrl = URL.createObjectURL(blob);
+        blobUrlMap.set(blobUrl, blob);
         port.postMessage({ id: msg.id, blobUrl });
         return;
       }
@@ -77,12 +82,14 @@ chrome.runtime.onConnect.addListener((port) => {
         });
         cachedScreenshotBlob = null;
         const blobUrl = URL.createObjectURL(pdfBlob);
+        blobUrlMap.set(blobUrl, pdfBlob);
         port.postMessage({ id: msg.id, blobUrl });
         return;
       }
 
       if (msg.type === 'revoke-blob-url') {
         URL.revokeObjectURL(msg.blobUrl);
+        blobUrlMap.delete(msg.blobUrl);
         port.postMessage({ id: msg.id, ok: true });
         return;
       }
@@ -221,11 +228,18 @@ async function createZip(files) {
     } else if (file.type === 'base64') {
       zip.file(file.filename, file.data, { base64: true });
     } else if (file.type === 'blob-url') {
-      const blob = await fetch(file.data).then((r) => r.blob());
+      // Look up the blob directly from our map instead of using fetch(),
+      // which doesn't reliably support blob: URLs in offscreen documents.
+      const blob = blobUrlMap.get(file.data);
+      if (!blob) {
+        throw new Error(`Blob not found for URL: ${file.data}`);
+      }
       zip.file(file.filename, blob);
     }
   }
 
   const zipBlob = await zip.generateAsync({ type: 'blob' });
-  return URL.createObjectURL(zipBlob);
+  const blobUrl = URL.createObjectURL(zipBlob);
+  blobUrlMap.set(blobUrl, zipBlob);
+  return blobUrl;
 }
