@@ -8,18 +8,41 @@
  *   'generate-pdf'       — convert a full-page screenshot into a multi-page PDF
  */
 
+// Cache the last stitched screenshot so generate-pdf doesn't need it re-sent
+let cachedScreenshotDataUrl = null;
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg.type === 'stitch-screenshots') {
     stitchScreenshots(msg)
-      .then((dataUrl) => sendResponse({ dataUrl }))
+      .then((dataUrl) => {
+        cachedScreenshotDataUrl = dataUrl;
+        sendResponse({ dataUrl });
+      })
       .catch((err) => sendResponse({ error: err.message }));
     return true;
   }
 
+  if (msg.type === 'cache-screenshot') {
+    cachedScreenshotDataUrl = msg.dataUrl;
+    sendResponse({ ok: true });
+    return false;
+  }
+
   if (msg.type === 'generate-pdf') {
-    generatePdf(msg)
-      .then((pdfDataUrl) => sendResponse({ pdfDataUrl }))
-      .catch((err) => sendResponse({ error: err.message }));
+    // Use cached screenshot (avoids re-sending large data URL via message)
+    const resolved = { ...msg };
+    if (!resolved.imageDataUrl && cachedScreenshotDataUrl) {
+      resolved.imageDataUrl = cachedScreenshotDataUrl;
+    }
+    generatePdf(resolved)
+      .then((pdfDataUrl) => {
+        cachedScreenshotDataUrl = null; // Free memory
+        sendResponse({ pdfDataUrl });
+      })
+      .catch((err) => {
+        cachedScreenshotDataUrl = null;
+        sendResponse({ error: err.message });
+      });
     return true;
   }
 

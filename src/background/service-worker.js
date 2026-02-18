@@ -111,6 +111,9 @@ async function captureFullPageScreenshot(tabId) {
   // Short-circuit: if page fits in one viewport, just capture once
   if (scrollHeight <= viewportHeight) {
     const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+    // Cache in offscreen doc so generate-pdf can use it without re-sending
+    await ensureOffscreenDocument();
+    await chrome.runtime.sendMessage({ type: 'cache-screenshot', dataUrl });
     return {
       png: dataUrl,
       pageWidth: viewportWidth,
@@ -295,9 +298,11 @@ async function archivePage(formats) {
     await reportProgress(40 + stepSize * completedSteps, 'Generating PDF...');
     try {
       await ensureOffscreenDocument();
+      // Don't send imageDataUrl here — it's already cached in the offscreen doc
+      // from either stitch-screenshots or cache-screenshot
       const pdfResponse = await chrome.runtime.sendMessage({
         type: 'generate-pdf',
-        imageDataUrl: screenshotData?.png || null,
+        imageDataUrl: null,
         pageTitle,
         pageUrl,
         pageWidth: screenshotData?.pageWidth || 0,
