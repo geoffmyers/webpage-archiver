@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Webpage Archiver</h1>
+
+    <div class="formats">
+      <label class="format-option">
+        <input type="checkbox" id="fmt-html" checked>
+        <span class="format-label">HTML</span>
+        <span class="format-desc">Single-file archive</span>
+      </label>
+      <label class="format-option">
+        <input type="checkbox" id="fmt-markdown" checked>
+        <span class="format-label">Markdown</span>
+        <span class="format-desc">Clean article text</span>
+      </label>
+      <label class="format-option">
+        <input type="checkbox" id="fmt-png" checked>
+        <span class="format-label">PNG</span>
+        <span class="format-desc">Full-page screenshot</span>
+      </label>
+      <label class="format-option">
+        <input type="checkbox" id="fmt-pdf" checked>
+        <span class="format-label">PDF</span>
+        <span class="format-desc">Printable document</span>
+      </label>
+    </div>
+
+    <button id="btn-archive" class="btn-primary">Archive</button>
+
+    <div id="status" class="status hidden"></div>
+
+    <div id="progress" class="progress hidden">
+      <div id="progress-bar" class="progress-bar"></div>
+    </div>
+
+    <div id="results" class="results hidden"></div>
+
+    <div class="footer">
+      <a href="#" id="btn-options">Options</a>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+{
+  "manifest_version": 3,
+  "name": "Webpage Archiver",
+  "version": "1.0.0",
+  "description": "Archive webpages as PDF, PNG, single-file HTML, and clean Markdown — all in one click",
+  "author": "Geoff Myers",
+  "homepage_url": "https://github.com/geoffmyers/geoff-myers-mono-repo",
+
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "downloads",
+    "storage",
+    "offscreen"
+  ],
+  "host_permissions": ["<all_urls>"],
+
+  "background": {
+    "service_worker": "src/background/service-worker.js"
+  },
+
+  "action": {
+    "default_popup": "src/popup/popup.html",
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "32": "assets/icons/icon-32.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    },
+    "default_title": "Webpage Archiver"
+  },
+
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "32": "assets/icons/icon-32.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  },
+
+  "options_ui": {
+    "page": "src/options/options.html",
+    "open_in_tab": true
+  },
+
+  "commands": {
+    "archive-page": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S",
+        "mac": "Command+Shift+S"
+      },
+      "description": "Archive current page with default formats"
+    }
+  },
+
+  "minimum_chrome_version": "109"
+}

@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Webpage Archiver — Options</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      font-size: 14px;
+      color: #1a1a1a;
+      background: #f9fafb;
+      padding: 40px;
+    }
+
+    .container {
+      max-width: 560px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+      padding: 32px;
+    }
+
+    h1 {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 24px;
+    }
+
+    .section {
+      margin-bottom: 24px;
+    }
+
+    .section h2 {
+      font-size: 14px;
+      font-weight: 600;
+      color: #374151;
+      margin-bottom: 8px;
+    }
+
+    .section p {
+      font-size: 12px;
+      color: #6b7280;
+      margin-bottom: 10px;
+    }
+
+    .format-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .format-grid label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .format-grid label:hover {
+      background: #f9fafb;
+    }
+
+    .format-grid input[type="checkbox"] {
+      accent-color: #2563eb;
+    }
+
+    .field {
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      margin-bottom: 4px;
+    }
+
+    .field input[type="text"],
+    .field select {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 13px;
+      font-family: 'SF Mono', Menlo, monospace;
+    }
+
+    .field .hint {
+      font-size: 11px;
+      color: #9ca3af;
+      margin-top: 3px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      padding-top: 16px;
+      border-top: 1px solid #e5e7eb;
+    }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      border: 1px solid #d1d5db;
+      background: #fff;
+      color: #374151;
+    }
+
+    .btn:hover {
+      background: #f9fafb;
+    }
+
+    .btn-primary {
+      background: #2563eb;
+      color: #fff;
+      border-color: #2563eb;
+    }
+
+    .btn-primary:hover {
+      background: #1d4ed8;
+    }
+
+    .saved-msg {
+      font-size: 13px;
+      color: #16a34a;
+      margin-left: 10px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .saved-msg.visible {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Webpage Archiver Options</h1>
+
+    <div class="section">
+      <h2>Default Formats</h2>
+      <p>These formats will be pre-selected when you open the popup.</p>
+      <div class="format-grid">
+        <label><input type="checkbox" id="opt-html" checked> HTML Archive</label>
+        <label><input type="checkbox" id="opt-markdown" checked> Markdown</label>
+        <label><input type="checkbox" id="opt-png" checked> PNG Screenshot</label>
+        <label><input type="checkbox" id="opt-pdf" checked> PDF Document</label>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>File Naming</h2>
+      <div class="field">
+        <label for="opt-pattern">Filename pattern</label>
+        <input type="text" id="opt-pattern" value="{date}_{hostname}_{title}">
+        <div class="hint">Variables: {date}, {hostname}, {title}, {timestamp}</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Download Location</h2>
+      <div class="field">
+        <label for="opt-subfolder">Subfolder (within Downloads)</label>
+        <input type="text" id="opt-subfolder" placeholder="webpage-archives">
+        <div class="hint">Leave empty to save directly in Downloads folder.</div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button id="btn-save" class="btn btn-primary">Save</button>
+      <button id="btn-reset" class="btn">Reset to Defaults</button>
+      <span id="saved-msg" class="saved-msg">Saved</span>
+    </div>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>
