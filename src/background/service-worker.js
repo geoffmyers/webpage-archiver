@@ -256,10 +256,15 @@ async function archivePage(formats) {
   }
 
   const results = [];
+  const files = []; // { filename, data, type: 'text'|'base64'|'blob-url' }
   const pageTitle = tab.title || 'untitled';
   const pageUrl = tab.url;
   const totalSteps = formats.length;
   let completedSteps = 0;
+
+  // Check ZIP bundling preference
+  const prefs = await chrome.storage.sync.get({ bundleAsZip: true });
+  const bundleAsZip = prefs.bundleAsZip;
 
   // Inject content script
   await reportProgress(5, 'Injecting content script...');
@@ -296,7 +301,7 @@ async function archivePage(formats) {
     }
   }
 
-  // Process each format
+  // Process each format — collect files for ZIP or download individually
   const stepSize = 50 / totalSteps;
 
   // HTML
@@ -304,7 +309,7 @@ async function archivePage(formats) {
     await reportProgress(40 + stepSize * completedSteps, 'Saving HTML archive...');
     try {
       const filename = await buildFilename(pageTitle, pageUrl, 'html');
-      await downloadText(captureResponse.html, filename, 'text/html');
+      files.push({ filename, data: captureResponse.html, type: 'text' });
       results.push({ label: `HTML — ${filename}`, success: true });
     } catch (err) {
       results.push({ label: `HTML — ${err.message}`, success: false });
@@ -320,7 +325,7 @@ async function archivePage(formats) {
     await reportProgress(40 + stepSize * completedSteps, 'Saving Markdown...');
     try {
       const filename = await buildFilename(pageTitle, pageUrl, 'md');
-      await downloadText(captureResponse.markdown, filename, 'text/markdown');
+      files.push({ filename, data: captureResponse.markdown, type: 'text' });
       results.push({ label: `Markdown — ${filename}`, success: true });
     } catch (err) {
       results.push({ label: `Markdown — ${err.message}`, success: false });
@@ -336,10 +341,12 @@ async function archivePage(formats) {
     await reportProgress(40 + stepSize * completedSteps, 'Saving screenshot...');
     try {
       const filename = await buildFilename(pageTitle, pageUrl, 'png');
-      await downloadDataUrl(screenshotData.png, filename);
-      // Revoke blob URL after download starts (blob URLs from offscreen doc)
       if (screenshotData.png.startsWith('blob:')) {
-        await sendOffscreenMessage({ type: 'revoke-blob-url', blobUrl: screenshotData.png });
+        files.push({ filename, data: screenshotData.png, type: 'blob-url' });
+      } else {
+        // Single-viewport data URL — strip prefix for base64
+        const base64 = screenshotData.png.replace(/^data:[^;]+;base64,/, '');
+        files.push({ filename, data: base64, type: 'base64' });
       }
       results.push({ label: `PNG — ${filename}`, success: true });
     } catch (err) {
@@ -356,7 +363,6 @@ async function archivePage(formats) {
     await reportProgress(40 + stepSize * completedSteps, 'Generating screenshot PDF...');
     try {
       await ensureOffscreenDocument();
-      // Screenshot is already cached in the offscreen doc from stitch or cache step
       const pdfResponse = await sendOffscreenMessage({
         type: 'generate-pdf',
         pageTitle,
@@ -366,8 +372,7 @@ async function archivePage(formats) {
       if (pdfResponse.blobUrl) {
         const ext = needsPrintPdf ? 'screenshot.pdf' : 'pdf';
         const filename = await buildFilename(pageTitle, pageUrl, ext);
-        await downloadDataUrl(pdfResponse.blobUrl, filename);
-        await sendOffscreenMessage({ type: 'revoke-blob-url', blobUrl: pdfResponse.blobUrl });
+        files.push({ filename, data: pdfResponse.blobUrl, type: 'blob-url' });
         results.push({ label: `Screenshot PDF — ${filename}`, success: true });
       } else {
         results.push({ label: 'Screenshot PDF — generation failed', success: false });
@@ -383,15 +388,67 @@ async function archivePage(formats) {
     await reportProgress(40 + stepSize * completedSteps, 'Generating print PDF...');
     try {
       const base64Data = await generatePrintPdf(tab.id);
-      const dataUrl = 'data:application/pdf;base64,' + base64Data;
       const ext = needsPdf ? 'print.pdf' : 'pdf';
       const filename = await buildFilename(pageTitle, pageUrl, ext);
-      await downloadDataUrl(dataUrl, filename);
+      files.push({ filename, data: base64Data, type: 'base64' });
       results.push({ label: `Print PDF — ${filename}`, success: true });
     } catch (err) {
       results.push({ label: `Print PDF — ${err.message}`, success: false });
     }
     completedSteps++;
+  }
+
+  // Download files — either as a single ZIP or individually
+  if (files.length > 0) {
+    if (bundleAsZip) {
+      await reportProgress(90, 'Creating ZIP archive...');
+      try {
+        await ensureOffscreenDocument();
+        // Strip subfolder prefix from filenames inside the ZIP
+        const zipFiles = files.map((f) => ({
+          ...f,
+          filename: f.filename.includes('/') ? f.filename.split('/').pop() : f.filename,
+        }));
+        const zipResponse = await sendOffscreenMessage({ type: 'create-zip', files: zipFiles });
+        const zipFilename = await buildFilename(pageTitle, pageUrl, 'zip');
+        await downloadDataUrl(zipResponse.blobUrl, zipFilename);
+        await sendOffscreenMessage({ type: 'revoke-blob-url', blobUrl: zipResponse.blobUrl });
+      } catch (err) {
+        results.push({ label: `ZIP — ${err.message}`, success: false });
+      }
+    } else {
+      // Download each file individually
+      for (const file of files) {
+        try {
+          if (file.type === 'text') {
+            await downloadText(file.data, file.filename,
+              file.filename.endsWith('.html') ? 'text/html' : 'text/markdown');
+          } else if (file.type === 'base64') {
+            const mime = file.filename.endsWith('.png') ? 'image/png' : 'application/pdf';
+            await downloadDataUrl(`data:${mime};base64,${file.data}`, file.filename);
+          } else if (file.type === 'blob-url') {
+            await downloadDataUrl(file.data, file.filename);
+          }
+        } catch (err) {
+          // Find the matching result and mark it as failed
+          const basename = file.filename.includes('/') ? file.filename.split('/').pop() : file.filename;
+          const match = results.find((r) => r.label.includes(basename) && r.success);
+          if (match) {
+            match.success = false;
+            match.label += ` (download failed: ${err.message})`;
+          }
+        }
+      }
+    }
+
+    // Revoke any remaining blob URLs (not needed after ZIP or individual downloads)
+    for (const file of files) {
+      if (file.type === 'blob-url') {
+        try {
+          await sendOffscreenMessage({ type: 'revoke-blob-url', blobUrl: file.data });
+        } catch { /* already revoked or offscreen doc closed */ }
+      }
+    }
   }
 
   await reportProgress(95, 'Done.');

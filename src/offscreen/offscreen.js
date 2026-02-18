@@ -13,6 +13,7 @@
  *   'cache-screenshot'   — cache a single-viewport screenshot for PDF use
  *   'generate-pdf'       — convert a full-page screenshot into a multi-page PDF
  *   'revoke-blob-url'    — free a blob URL's memory
+ *   'create-zip'         — bundle files into a ZIP archive and return a blob URL
  */
 
 // Cache the last stitched screenshot blob so generate-pdf can use it directly
@@ -83,6 +84,12 @@ chrome.runtime.onConnect.addListener((port) => {
       if (msg.type === 'revoke-blob-url') {
         URL.revokeObjectURL(msg.blobUrl);
         port.postMessage({ id: msg.id, ok: true });
+        return;
+      }
+
+      if (msg.type === 'create-zip') {
+        const blobUrl = await createZip(msg.files);
+        port.postMessage({ id: msg.id, blobUrl });
         return;
       }
     } catch (err) {
@@ -201,4 +208,24 @@ function blobToDataUrl(blob) {
 
 function dataUrlToBlob(dataUrl) {
   return fetch(dataUrl).then((r) => r.blob());
+}
+
+// ─── ZIP Creation ────────────────────────────────────────────────────────────
+
+async function createZip(files) {
+  const zip = new JSZip();
+
+  for (const file of files) {
+    if (file.type === 'text') {
+      zip.file(file.filename, file.data);
+    } else if (file.type === 'base64') {
+      zip.file(file.filename, file.data, { base64: true });
+    } else if (file.type === 'blob-url') {
+      const blob = await fetch(file.data).then((r) => r.blob());
+      zip.file(file.filename, blob);
+    }
+  }
+
+  const zipBlob = await zip.generateAsync({ type: 'blob' });
+  return URL.createObjectURL(zipBlob);
 }

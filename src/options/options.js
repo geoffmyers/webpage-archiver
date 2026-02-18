@@ -4,6 +4,7 @@ const DEFAULTS = {
   formats: { html: true, markdown: true, png: true, pdf: true, printpdf: true },
   filenamePattern: '{date}_{hostname}_{title}',
   subfolder: '',
+  bundleAsZip: true,
 };
 
 const FORMAT_IDS = ['html', 'markdown', 'png', 'pdf', 'printpdf'];
@@ -15,6 +16,7 @@ function loadOptions() {
     }
     document.getElementById('opt-pattern').value = data.filenamePattern || DEFAULTS.filenamePattern;
     document.getElementById('opt-subfolder').value = data.subfolder || '';
+    document.getElementById('opt-zip').checked = data.bundleAsZip !== false;
   });
 }
 
@@ -28,6 +30,7 @@ function saveOptions() {
     formats,
     filenamePattern: document.getElementById('opt-pattern').value.trim() || DEFAULTS.filenamePattern,
     subfolder: document.getElementById('opt-subfolder').value.trim(),
+    bundleAsZip: document.getElementById('opt-zip').checked,
   };
 
   chrome.storage.sync.set(options, () => {

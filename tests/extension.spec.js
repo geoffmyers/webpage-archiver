@@ -59,6 +59,7 @@ test.describe('Extension Structure', () => {
       'vendor/Readability.js',
       'vendor/html2canvas.min.js',
       'vendor/jspdf.umd.min.js',
+      'vendor/jszip.min.js',
       'vendor/turndown.umd.js',
       'vendor/turndown-plugin-gfm.js',
     ];
@@ -84,12 +85,13 @@ test.describe('Extension Structure', () => {
     }
   });
 
-  test('offscreen document references correct vendor library', () => {
+  test('offscreen document references correct vendor libraries', () => {
     const html = fs.readFileSync(
       path.join(EXTENSION_PATH, 'src/offscreen/offscreen.html'),
       'utf-8'
     );
     expect(html).toContain('jspdf.umd.min.js');
+    expect(html).toContain('jszip.min.js');
     expect(html).toContain('offscreen.js');
   });
 
@@ -130,6 +132,7 @@ test.describe('Extension Structure', () => {
     expect(deps['jspdf']).toBeDefined();
     expect(deps['turndown']).toBeDefined();
     expect(deps['turndown-plugin-gfm']).toBeDefined();
+    expect(deps['jszip']).toBeDefined();
   });
 });
 
@@ -217,6 +220,16 @@ test.describe('Source Code Quality', () => {
     expect(code).toContain('jsPDF');
   });
 
+  test('offscreen document handles create-zip messages', () => {
+    const code = fs.readFileSync(
+      path.join(EXTENSION_PATH, 'src/offscreen/offscreen.js'),
+      'utf-8'
+    );
+    expect(code).toContain("msg.type === 'create-zip'");
+    expect(code).toContain('createZip');
+    expect(code).toContain('JSZip');
+  });
+
   test('offscreen stitching caps canvas height at 32000px', () => {
     const code = fs.readFileSync(
       path.join(EXTENSION_PATH, 'src/offscreen/offscreen.js'),
@@ -263,6 +276,7 @@ test.describe('Source Code Quality', () => {
     expect(code).toContain('saveOptions');
     expect(code).toContain('resetOptions');
     expect(code).toContain('DEFAULTS');
+    expect(code).toContain('bundleAsZip');
   });
 
   test('service worker supports keyboard shortcut', () => {
@@ -272,6 +286,15 @@ test.describe('Source Code Quality', () => {
     );
     expect(code).toContain('chrome.commands.onCommand');
     expect(code).toContain("command === 'archive-page'");
+  });
+
+  test('service worker supports ZIP bundling option', () => {
+    const code = fs.readFileSync(
+      path.join(EXTENSION_PATH, 'src/background/service-worker.js'),
+      'utf-8'
+    );
+    expect(code).toContain('bundleAsZip');
+    expect(code).toContain('create-zip');
   });
 
   test('service worker supports configurable filename pattern', () => {
@@ -354,6 +377,14 @@ test.describe('Vendor Library Validation', () => {
       'utf-8'
     );
     expect(code).toContain('jspdf');
+  });
+
+  test('JSZip exposes JSZip global', () => {
+    const code = fs.readFileSync(
+      path.join(EXTENSION_PATH, 'vendor/jszip.min.js'),
+      'utf-8'
+    );
+    expect(code).toContain('JSZip');
   });
 });
 
@@ -465,6 +496,11 @@ test.describe('Extension Loading in Browser', () => {
     // Verify subfolder field
     const subfolderInput = optionsPage.locator('#opt-subfolder');
     await expect(subfolderInput).toBeVisible();
+
+    // Verify ZIP bundle checkbox
+    const zipCheckbox = optionsPage.locator('#opt-zip');
+    await expect(zipCheckbox).toBeVisible();
+    await expect(zipCheckbox).toBeChecked();
 
     // Verify buttons
     await expect(optionsPage.locator('#btn-save')).toBeVisible();

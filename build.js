@@ -23,6 +23,10 @@ const copies = [
     dest: 'vendor/jspdf.umd.min.js',
   },
   {
+    src: 'node_modules/jszip/dist/jszip.min.js',
+    dest: 'vendor/jszip.min.js',
+  },
+  {
     src: 'node_modules/@mozilla/readability/Readability.js',
     dest: 'vendor/Readability.js',
   },
