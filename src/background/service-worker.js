@@ -134,11 +134,12 @@ async function captureFullPageScreenshot(tabId) {
   const dims = await chrome.tabs.sendMessage(tabId, { type: 'get-page-dimensions' });
   const { scrollHeight, viewportWidth, viewportHeight, devicePixelRatio } = dims;
 
+  await ensureOffscreenDocument();
+
   // Short-circuit: if page fits in one viewport, just capture once
   if (scrollHeight <= viewportHeight) {
     const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
     // Cache in offscreen doc so generate-pdf can use it without re-sending
-    await ensureOffscreenDocument();
     await sendOffscreenMessage({ type: 'cache-screenshot', dataUrl });
     return {
       png: dataUrl,
@@ -170,8 +171,8 @@ async function captureFullPageScreenshot(tabId) {
   // Scroll back to top
   await chrome.tabs.sendMessage(tabId, { type: 'scroll-to', y: 0 });
 
-  // Stitch captures together in the offscreen document
-  await ensureOffscreenDocument();
+  // Stitch captures together in the offscreen document.
+  // Returns a blob URL (not a data URL) to avoid the 64 MiB message limit.
   const stitchResponse = await sendOffscreenMessage({
     type: 'stitch-screenshots',
     captures,
@@ -183,7 +184,7 @@ async function captureFullPageScreenshot(tabId) {
   });
 
   return {
-    png: stitchResponse.dataUrl,
+    png: stitchResponse.blobUrl,
     pageWidth: viewportWidth,
     pageHeight: scrollHeight,
   };
@@ -305,6 +306,10 @@ async function archivePage(formats) {
     try {
       const filename = await buildFilename(pageTitle, pageUrl, 'png');
       await downloadDataUrl(screenshotData.png, filename);
+      // Revoke blob URL after download starts (blob URLs from offscreen doc)
+      if (screenshotData.png.startsWith('blob:')) {
+        await sendOffscreenMessage({ type: 'revoke-blob-url', blobUrl: screenshotData.png });
+      }
       results.push({ label: `PNG — ${filename}`, success: true });
     } catch (err) {
       results.push({ label: `PNG — ${err.message}`, success: false });
@@ -320,20 +325,17 @@ async function archivePage(formats) {
     await reportProgress(40 + stepSize * completedSteps, 'Generating PDF...');
     try {
       await ensureOffscreenDocument();
-      // Don't send imageDataUrl here — it's already cached in the offscreen doc
-      // from either stitch-screenshots or cache-screenshot
+      // Screenshot is already cached in the offscreen doc from stitch or cache step
       const pdfResponse = await sendOffscreenMessage({
         type: 'generate-pdf',
-        imageDataUrl: null,
         pageTitle,
         pageUrl,
-        pageWidth: screenshotData?.pageWidth || 0,
-        pageHeight: screenshotData?.pageHeight || 0,
       });
 
-      if (pdfResponse.pdfDataUrl) {
+      if (pdfResponse.blobUrl) {
         const filename = await buildFilename(pageTitle, pageUrl, 'pdf');
-        await downloadDataUrl(pdfResponse.pdfDataUrl, filename);
+        await downloadDataUrl(pdfResponse.blobUrl, filename);
+        await sendOffscreenMessage({ type: 'revoke-blob-url', blobUrl: pdfResponse.blobUrl });
         results.push({ label: `PDF — ${filename}`, success: true });
       } else {
         results.push({ label: 'PDF — generation failed', success: false });
