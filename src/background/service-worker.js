@@ -147,7 +147,7 @@ function downloadText(text, filename, mimeType = 'text/plain') {
 async function archivePage(formats) {
   // Get active tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab) throw new Error('No active tab found.');
+  if (!tab || !tab.url) throw new Error('No active tab found.');
 
   if (tab.url.startsWith('chrome://') || tab.url.startsWith('chrome-extension://') || tab.url.startsWith('about:')) {
     throw new Error('Cannot archive browser internal pages.');
