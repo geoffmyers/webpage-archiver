@@ -57,8 +57,8 @@ let offscreenCreating = null;
 
 async function ensureOffscreenDocument() {
   const existingContexts = await chrome.runtime.getContexts({
-    contextType: 'OFFSCREEN_DOCUMENT',
-    documentUrl: chrome.runtime.getURL('src/offscreen/offscreen.html'),
+    contextTypes: ['OFFSCREEN_DOCUMENT'],
+    documentUrls: [chrome.runtime.getURL('src/offscreen/offscreen.html')],
   });
   if (existingContexts.length > 0) return;
 
@@ -119,27 +119,11 @@ function downloadDataUrl(dataUrl, filename) {
   });
 }
 
-function downloadBlob(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  return new Promise((resolve, reject) => {
-    chrome.downloads.download(
-      { url, filename, conflictAction: 'uniquify', saveAs: false },
-      (downloadId) => {
-        // Revoke after a short delay to ensure download starts
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-        if (chrome.runtime.lastError) {
-          reject(new Error(chrome.runtime.lastError.message));
-        } else {
-          resolve(downloadId);
-        }
-      }
-    );
-  });
-}
-
 function downloadText(text, filename, mimeType = 'text/plain') {
-  const blob = new Blob([text], { type: mimeType });
-  return downloadBlob(blob, filename);
+  // MV3 service workers don't have URL.createObjectURL — use a data URL instead
+  const base64 = btoa(unescape(encodeURIComponent(text)));
+  const dataUrl = `data:${mimeType};base64,${base64}`;
+  return downloadDataUrl(dataUrl, filename);
 }
 
 // ─── Main archive handler ────────────────────────────────────────────────────
