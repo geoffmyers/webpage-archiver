@@ -164,11 +164,25 @@ async function captureFullPageScreenshot(tabId) {
     // Scroll to position
     const pos = await chrome.tabs.sendMessage(tabId, { type: 'scroll-to', y: currentY });
 
-    // Small delay to let rendering settle after scroll
-    await new Promise((r) => setTimeout(r, 150));
+    // Delay to let rendering settle and respect Chrome's
+    // MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND rate limit (~2/sec).
+    await new Promise((r) => setTimeout(r, 350));
 
-    // Capture the visible viewport and send immediately to offscreen doc
-    const dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+    // Capture with retry on rate-limit errors
+    let dataUrl;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        dataUrl = await chrome.tabs.captureVisibleTab(null, { format: 'png' });
+        break;
+      } catch (err) {
+        if (attempt < 2 && err.message?.includes('MAX_CAPTURE_VISIBLE_TAB_CALLS_PER_SECOND')) {
+          await new Promise((r) => setTimeout(r, 1000));
+          continue;
+        }
+        throw err;
+      }
+    }
+
     await sendOffscreenMessage({
       type: 'stitch-add-capture',
       dataUrl,
