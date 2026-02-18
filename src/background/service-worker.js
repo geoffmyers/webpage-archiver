@@ -214,6 +214,21 @@ function downloadText(text, filename, mimeType = 'text/plain') {
   return downloadDataUrl(dataUrl, filename);
 }
 
+// ─── Print PDF via Chrome DevTools Protocol ──────────────────────────────────
+
+async function generatePrintPdf(tabId) {
+  await chrome.debugger.attach({ tabId }, '1.3');
+  try {
+    const result = await chrome.debugger.sendCommand({ tabId }, 'Page.printToPDF', {
+      printBackground: true,
+      preferCSSPageSize: true,
+    });
+    return result.data; // base64-encoded PDF
+  } finally {
+    await chrome.debugger.detach({ tabId });
+  }
+}
+
 // ─── Main archive handler ────────────────────────────────────────────────────
 
 async function archivePage(formats) {
@@ -240,6 +255,7 @@ async function archivePage(formats) {
   const needsPng = formats.includes('png');
   const needsMarkdown = formats.includes('markdown');
   const needsPdf = formats.includes('pdf');
+  const needsPrintPdf = formats.includes('printpdf');
 
   await reportProgress(15, 'Capturing page content...');
 
@@ -320,9 +336,9 @@ async function archivePage(formats) {
     completedSteps++;
   }
 
-  // PDF
+  // Screenshot PDF
   if (needsPdf) {
-    await reportProgress(40 + stepSize * completedSteps, 'Generating PDF...');
+    await reportProgress(40 + stepSize * completedSteps, 'Generating screenshot PDF...');
     try {
       await ensureOffscreenDocument();
       // Screenshot is already cached in the offscreen doc from stitch or cache step
@@ -333,15 +349,32 @@ async function archivePage(formats) {
       });
 
       if (pdfResponse.blobUrl) {
-        const filename = await buildFilename(pageTitle, pageUrl, 'pdf');
+        const ext = needsPrintPdf ? 'screenshot.pdf' : 'pdf';
+        const filename = await buildFilename(pageTitle, pageUrl, ext);
         await downloadDataUrl(pdfResponse.blobUrl, filename);
         await sendOffscreenMessage({ type: 'revoke-blob-url', blobUrl: pdfResponse.blobUrl });
-        results.push({ label: `PDF — ${filename}`, success: true });
+        results.push({ label: `Screenshot PDF — ${filename}`, success: true });
       } else {
-        results.push({ label: 'PDF — generation failed', success: false });
+        results.push({ label: 'Screenshot PDF — generation failed', success: false });
       }
     } catch (err) {
-      results.push({ label: `PDF — ${err.message}`, success: false });
+      results.push({ label: `Screenshot PDF — ${err.message}`, success: false });
+    }
+    completedSteps++;
+  }
+
+  // Print PDF
+  if (needsPrintPdf) {
+    await reportProgress(40 + stepSize * completedSteps, 'Generating print PDF...');
+    try {
+      const base64Data = await generatePrintPdf(tab.id);
+      const dataUrl = 'data:application/pdf;base64,' + base64Data;
+      const ext = needsPdf ? 'print.pdf' : 'pdf';
+      const filename = await buildFilename(pageTitle, pageUrl, ext);
+      await downloadDataUrl(dataUrl, filename);
+      results.push({ label: `Print PDF — ${filename}`, success: true });
+    } catch (err) {
+      results.push({ label: `Print PDF — ${err.message}`, success: false });
     }
     completedSteps++;
   }
@@ -370,7 +403,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === 'archive-page') {
     const data = await chrome.storage.sync.get({
-      formats: { html: true, markdown: true, png: true, pdf: true },
+      formats: { html: true, markdown: true, png: true, pdf: true, printpdf: true },
     });
     const formats = Object.entries(data.formats)
       .filter(([, enabled]) => enabled)

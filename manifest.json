@@ -11,7 +11,8 @@
     "scripting",
     "downloads",
     "storage",
-    "offscreen"
+    "offscreen",
+    "debugger"
   ],
   "host_permissions": ["<all_urls>"],
 

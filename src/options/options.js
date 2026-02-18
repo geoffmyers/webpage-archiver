@@ -1,12 +1,12 @@
 'use strict';
 
 const DEFAULTS = {
-  formats: { html: true, markdown: true, png: true, pdf: true },
+  formats: { html: true, markdown: true, png: true, pdf: true, printpdf: true },
   filenamePattern: '{date}_{hostname}_{title}',
   subfolder: '',
 };
 
-const FORMAT_IDS = ['html', 'markdown', 'png', 'pdf'];
+const FORMAT_IDS = ['html', 'markdown', 'png', 'pdf', 'printpdf'];
 
 function loadOptions() {
   chrome.storage.sync.get(DEFAULTS, (data) => {

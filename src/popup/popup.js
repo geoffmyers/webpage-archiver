@@ -1,6 +1,6 @@
 'use strict';
 
-const FORMAT_IDS = ['html', 'markdown', 'png', 'pdf'];
+const FORMAT_IDS = ['html', 'markdown', 'png', 'pdf', 'printpdf'];
 
 const $archive = document.getElementById('btn-archive');
 const $status = document.getElementById('status');
@@ -10,7 +10,7 @@ const $results = document.getElementById('results');
 const $options = document.getElementById('btn-options');
 
 // Load saved format preferences
-chrome.storage.sync.get({ formats: { html: true, markdown: true, png: true, pdf: true } }, (data) => {
+chrome.storage.sync.get({ formats: { html: true, markdown: true, png: true, pdf: true, printpdf: true } }, (data) => {
   for (const fmt of FORMAT_IDS) {
     document.getElementById(`fmt-${fmt}`).checked = data.formats[fmt] !== false;
   }

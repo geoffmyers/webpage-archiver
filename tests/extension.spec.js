@@ -22,6 +22,7 @@ test.describe('Extension Structure', () => {
     expect(manifest.permissions).toContain('downloads');
     expect(manifest.permissions).toContain('storage');
     expect(manifest.permissions).toContain('offscreen');
+    expect(manifest.permissions).toContain('debugger');
     expect(manifest.host_permissions).toContain('<all_urls>');
     expect(manifest.background.service_worker).toBe('src/background/service-worker.js');
     expect(manifest.action.default_popup).toBe('src/popup/popup.html');
@@ -283,6 +284,18 @@ test.describe('Source Code Quality', () => {
     expect(code).toContain('subfolder');
   });
 
+  test('service worker supports print PDF via chrome.debugger', () => {
+    const code = fs.readFileSync(
+      path.join(EXTENSION_PATH, 'src/background/service-worker.js'),
+      'utf-8'
+    );
+    expect(code).toContain('chrome.debugger.attach');
+    expect(code).toContain('chrome.debugger.sendCommand');
+    expect(code).toContain('Page.printToPDF');
+    expect(code).toContain('chrome.debugger.detach');
+    expect(code).toContain('generatePrintPdf');
+  });
+
   test('file naming sanitizes dangerous characters', () => {
     const code = fs.readFileSync(
       path.join(EXTENSION_PATH, 'src/background/service-worker.js'),
@@ -388,7 +401,7 @@ test.describe('Extension Loading in Browser', () => {
     expect(title).toBe('Webpage Archiver');
 
     // Verify all format checkboxes exist and are checked by default
-    for (const fmt of ['html', 'markdown', 'png', 'pdf']) {
+    for (const fmt of ['html', 'markdown', 'png', 'pdf', 'printpdf']) {
       const checkbox = popupPage.locator(`#fmt-${fmt}`);
       await expect(checkbox).toBeVisible();
       await expect(checkbox).toBeChecked();
@@ -435,7 +448,7 @@ test.describe('Extension Loading in Browser', () => {
     expect(title).toBe('Webpage Archiver Options');
 
     // Verify format checkboxes
-    for (const fmt of ['html', 'markdown', 'png', 'pdf']) {
+    for (const fmt of ['html', 'markdown', 'png', 'pdf', 'printpdf']) {
       const checkbox = optionsPage.locator(`#opt-${fmt}`);
       await expect(checkbox).toBeVisible();
     }
@@ -631,6 +644,7 @@ test.describe('Extension Loading in Browser', () => {
     // Ensure only Markdown and HTML are checked (skip PNG/PDF for speed)
     await popupPage.locator('#fmt-png').uncheck();
     await popupPage.locator('#fmt-pdf').uncheck();
+    await popupPage.locator('#fmt-printpdf').uncheck();
     await expect(popupPage.locator('#fmt-html')).toBeChecked();
     await expect(popupPage.locator('#fmt-markdown')).toBeChecked();
 
