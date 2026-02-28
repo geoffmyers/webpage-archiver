@@ -1,3 +1,11 @@
+---
+title: CLAUDE.md - Webpage Archiver Chrome Extension
+created: 2026-02-17
+modified: 2026-02-17
+description: "A Chrome extension (Manifest V3) that archives webpages in four formats — single-file HTML, clean Markdown, full-page PNG screenshot, and PDF — all in one click. Uses Readability for content..."
+tags: [chrome-extension, claude]
+---
+
 # CLAUDE.md - Webpage Archiver Chrome Extension
 
 ## Project Overview

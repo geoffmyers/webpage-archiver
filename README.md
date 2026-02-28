@@ -1,3 +1,11 @@
+---
+title: Webpage Archiver
+created: 2026-02-17
+modified: 2026-02-17
+description: "A Chrome extension that archives webpages in four formats — all in one click:"
+tags: [chrome-extension, readme]
+---
+
 # Webpage Archiver
 
 A Chrome extension that archives webpages in four formats — all in one click:
