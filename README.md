@@ -108,3 +108,7 @@ Access via the **Options** link in the popup or `chrome://extensions` → Webpag
 | [jsPDF](https://github.com/parallax/jsPDF) | ^2.5.2 | MIT | PDF generation |
 | [turndown](https://github.com/mixmark-io/turndown) | ^7.2.0 | MIT | HTML → Markdown conversion |
 | [turndown-plugin-gfm](https://github.com/mixmark-io/turndown-plugin-gfm) | ^1.0.2 | MIT | GFM table support |
+
+## License
+
+This project is licensed under the GNU General Public License v2.0 - see the [LICENSE.md](LICENSE.md) file for details.

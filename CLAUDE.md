@@ -96,3 +96,4 @@ npm run build
 - **AGPL-3.0 note**: The original plan called for `single-file-core` (AGPL-3.0) but this implementation uses a custom HTML serializer instead, avoiding the AGPL dependency.
 - **vendor/ directory** contains built files from `npm run build`. Run this after `npm install` or dependency updates.
 - Requires Chrome 109+ (Manifest V3 with offscreen document support)
+- This is a git subtree; push changes upstream with `git subtree push --prefix=google-chrome-extensions/webpage-archiver webpage-archiver main`
