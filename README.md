@@ -10,14 +10,8 @@
 
 
 
-## Screenshot
 
-<p align="center">
-  <img src="docs/screenshots/popup.png" width="100%" alt="The popup: pick any combination of the five output formats, then Archive.">
-</p>
-
-<p align="center"><em>The popup: pick any combination of the five output formats, then Archive.</em></p>
-A Chrome extension that archives webpages in four formats — all in one click:
+A Chrome extension that archives webpages in several formats — all in one click:
 
 | Format | Library | What it captures |
 |--------|---------|-----------------|
@@ -25,6 +19,14 @@ A Chrome extension that archives webpages in four formats — all in one click:
 | **Markdown** | [Readability](https://github.com/mozilla/readability) + [Turndown](https://github.com/mixmark-io/turndown) | Clean article content with YAML frontmatter |
 | **PNG** | [html2canvas](https://html2canvas.hertzen.com/) | Full-page screenshot |
 | **PDF** | [jsPDF](https://github.com/parallax/jsPDF) | Multi-page PDF from the screenshot |
+
+## Screenshot
+
+<p align="center">
+  <img src="docs/screenshots/popup.png" width="100%" alt="The popup: pick any combination of the five output formats, then Archive.">
+</p>
+
+<p align="center"><em>The popup: pick any combination of the five output formats, then Archive.</em></p>
 
 ## Prerequisites
 
@@ -119,9 +121,9 @@ Access via the **Options** link in the popup or `chrome://extensions` → Webpag
 
 | Library | Version | License | Purpose |
 |---------|---------|---------|---------|
-| [@mozilla/readability](https://github.com/mozilla/readability) | ^0.5.0 | Apache-2.0 | Article content extraction |
+| [@mozilla/readability](https://github.com/mozilla/readability) | ^0.6.0 | Apache-2.0 | Article content extraction |
 | [html2canvas](https://html2canvas.hertzen.com/) | ^1.4.1 | MIT | Full-page screenshot |
-| [jsPDF](https://github.com/parallax/jsPDF) | ^2.5.2 | MIT | PDF generation |
+| [jsPDF](https://github.com/parallax/jsPDF) | ^4.2.1 | MIT | PDF generation |
 | [turndown](https://github.com/mixmark-io/turndown) | ^7.2.0 | MIT | HTML → Markdown conversion |
 | [turndown-plugin-gfm](https://github.com/mixmark-io/turndown-plugin-gfm) | ^1.0.2 | MIT | GFM table support |
 
@@ -141,8 +143,7 @@ layout, the data flow, and the constraints worth knowing before changing it.
 ## Contributing
 
 Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
-for setup, checks and how this repository is published, and
-[ARCHITECTURE.md](ARCHITECTURE.md) for how the project fits together.
+for setup, checks and how this repository is published.
 
 ## License
 
