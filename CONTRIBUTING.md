@@ -34,6 +34,23 @@ npm test
 
 <!-- CHECKS:END -->
 
+<!-- RELEASES:START -->
+### Releases
+
+Every push to `main` runs the release workflow
+([`.github/workflows/release.yml`](.github/workflows/release.yml)). It reads the version with
+
+```bash
+jq -r .version manifest.json
+```
+
+and, if `v<version>` has no release yet, builds these and publishes them as
+a GitHub Release. To release, raise the version.
+
+- **Chrome extension** (Node.js 22): `*.zip`
+
+<!-- RELEASES:END -->
+
 ## Before you open a pull request
 
 - Keep the change focused. One concern per PR is much easier to review.

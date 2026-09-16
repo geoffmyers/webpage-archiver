@@ -528,16 +528,13 @@ test.describe('Extension Loading in Browser', () => {
     await optionsPage.reload();
     await optionsPage.waitForLoadState('load');
 
-    // Give storage time to load
-    await optionsPage.waitForTimeout(500);
-    const newValue = await optionsPage.locator('#opt-subfolder').inputValue();
-    expect(newValue).toBe('test-archives');
+    // The page fills its fields once storage answers: wait for that, not a
+    // fixed delay (500 ms was not always enough on a busy machine).
+    await expect(optionsPage.locator('#opt-subfolder')).toHaveValue('test-archives', { timeout: 5000 });
 
     // Reset
     await optionsPage.locator('#btn-reset').click();
-    await optionsPage.waitForTimeout(500);
-    const resetValue = await optionsPage.locator('#opt-subfolder').inputValue();
-    expect(resetValue).toBe('');
+    await expect(optionsPage.locator('#opt-subfolder')).toHaveValue('', { timeout: 5000 });
 
     await optionsPage.close();
   });

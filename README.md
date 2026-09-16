@@ -77,6 +77,10 @@ Everything happens inside your browser. Nothing is sent to a server.
 
 ## Installation
 
+Or skip the clone: download the zip from the [latest
+release](https://github.com/geoffmyers/webpage-archiver/releases/latest), unzip
+it and load that folder.
+
 ```bash
 git clone https://github.com/geoffmyers/webpage-archiver.git
 ```
