@@ -1,8 +1,3 @@
----
-title: Architecture
-description: How the archiver captures a page in several formats from a Manifest V3 extension.
----
-
 # Architecture
 
 A Manifest V3 Chrome extension. All capture happens in the page and the

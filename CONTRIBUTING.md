@@ -1,8 +1,3 @@
----
-title: Contributing
-description: How to set up, change and submit improvements to Webpage Archiver.
----
-
 # Contributing to Webpage Archiver
 
 Thanks for taking an interest. This project is developed inside a private
