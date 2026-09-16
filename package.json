@@ -1,6 +1,6 @@
 {
   "name": "webpage-archiver",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "license": "GPL-3.0-or-later",
   "private": true,
   "description": "Chrome extension to archive webpages as PDF, PNG, HTML, and Markdown",

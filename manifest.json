@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Webpage Archiver",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Archive webpages as PDF, PNG, single-file HTML, and clean Markdown — all in one click",
   "author": "Geoff Myers",
   "homepage_url": "https://github.com/geoffmyers/webpage-archiver",

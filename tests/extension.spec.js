@@ -16,7 +16,11 @@ test.describe('Extension Structure', () => {
 
     expect(manifest.manifest_version).toBe(3);
     expect(manifest.name).toBe('Webpage Archiver');
-    expect(manifest.version).toBe('1.0.0');
+    // Chrome's version format, and the same version the package declares
+    // (the release workflow tags releases with it).
+    expect(manifest.version).toMatch(/^\d+(\.\d+){0,3}$/);
+    const pkg = JSON.parse(fs.readFileSync(path.join(EXTENSION_PATH, 'package.json'), 'utf-8'));
+    expect(manifest.version).toBe(pkg.version);
     expect(manifest.permissions).toContain('activeTab');
     expect(manifest.permissions).toContain('scripting');
     expect(manifest.permissions).toContain('downloads');
