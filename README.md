@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/icons/icon-128.png" width="96" height="96" alt="Webpage Archiver icon">
+  <img src="docs/icon.svg" width="96" height="96" alt="Webpage Archiver icon">
 </p>
 
 # Webpage Archiver
@@ -226,6 +226,9 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for more detail.
 | [JSZip](https://stuk.github.io/jszip/) | MIT or GPL-3.0 | The ZIP bundle |
 | [html2canvas](https://html2canvas.hertzen.com/) | MIT | Still bundled in `vendor/`, but no longer used: screenshots now come from the browser itself |
 | [Playwright](https://playwright.dev/) | Apache-2.0 | Tests |
+
+The icon, in the extension and here, is the [Font Awesome](https://fontawesome.com/)
+`box-archive` glyph, used under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 Chrome is a trademark of Google LLC. This extension is not affiliated with or
 endorsed by Google.

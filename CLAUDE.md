@@ -31,7 +31,7 @@ src/
   options/
     options.html                 - Settings page (default formats, filename pattern, subfolder)
     options.js                   - Settings persistence via chrome.storage.sync
-assets/icons/                    - Extension icons (16, 32, 48, 128px)
+assets/icons/                    - Extension icons (16, 32, 48, 128px), rendered from docs/icon.svg; don't edit by hand
 ```
 
 ### Capture Flow
