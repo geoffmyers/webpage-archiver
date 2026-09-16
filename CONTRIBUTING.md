@@ -16,11 +16,23 @@ npm install
 
 ## Checks
 
-Run these before pushing:
+<!-- CHECKS:START -->
+Every push and pull request runs these checks in GitHub Actions
+([`.github/workflows/checks.yml`](.github/workflows/checks.yml)), and every release has passed them.
+To run one yourself, use the same commands from the directory shown.
+
+**build and test** (Node.js 22 with Playwright's Chromium, under a virtual display, from the repository root):
 
 ```bash
+npm ci
 npm run build
+# Chromium only loads extensions with a display; xvfb-run hangs in containers.
+Xvfb :99 -screen 0 1280x1024x24 -nolisten tcp >/dev/null 2>&1 &
+export DISPLAY=:99
+npm test
 ```
+
+<!-- CHECKS:END -->
 
 ## Before you open a pull request
 

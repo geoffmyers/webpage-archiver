@@ -6,7 +6,8 @@
   "description": "Chrome extension to archive webpages as PDF, PNG, HTML, and Markdown",
   "scripts": {
     "build": "node build.js",
-    "clean": "rm -rf vendor"
+    "clean": "rm -rf vendor",
+    "test": "npx playwright test --config=tests/playwright.config.js"
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
