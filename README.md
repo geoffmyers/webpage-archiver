@@ -6,6 +6,8 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
 <!-- BADGES:END -->
 
+## Description
+
 
 
 ## Screenshot
@@ -130,6 +132,11 @@ Article extraction by [Readability](https://github.com/mozilla/readability)
 [html2canvas](https://html2canvas.hertzen.com/); Markdown conversion by
 [Turndown](https://github.com/mixmark-io/turndown) with its GFM plugin;
 archives packed by [JSZip](https://stuk.github.io/jszip/).
+
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how the project fits together — the
+layout, the data flow, and the constraints worth knowing before changing it.
 
 ## Contributing
 
