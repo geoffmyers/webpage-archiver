@@ -10,15 +10,6 @@
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
 <!-- BADGES:END -->
 
-## Description
-
-A Manifest V3 Chrome extension that saves the page you are looking at in up to
-five formats with one click: a self-contained HTML file, clean Markdown, a
-full-page PNG, a screenshot PDF and a print PDF with selectable text. By default
-the files arrive as one ZIP in your Downloads folder.
-
-Everything happens inside your browser. Nothing is sent to a server.
-
 ## Table of Contents
 
 - [Description](#description)
@@ -38,6 +29,15 @@ Everything happens inside your browser. Nothing is sent to a server.
 - [Credits](#credits)
 - [Contributing](#contributing)
 - [License](#license)
+
+## Description
+
+A Manifest V3 Chrome extension that saves the page you are looking at in up to
+five formats with one click: a self-contained HTML file, clean Markdown, a
+full-page PNG, a screenshot PDF and a print PDF with selectable text. By default
+the files arrive as one ZIP in your Downloads folder.
+
+Everything happens inside your browser. Nothing is sent to a server.
 
 ## Screenshots
 
