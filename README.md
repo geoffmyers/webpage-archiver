@@ -1,5 +1,20 @@
 # Webpage Archiver
 
+<!-- BADGES:START -->
+![Chrome%20Extension MV3](https://img.shields.io/badge/Chrome%20Extension-MV3-4285F4?style=flat-square&logo=googlechrome)
+[![Licence GPL--2.0](https://img.shields.io/badge/licence-GPL--2.0-blue?style=flat-square)](LICENSE.md)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
+<!-- BADGES:END -->
+
+
+
+## Screenshot
+
+<p align="center">
+  <img src="docs/screenshots/popup.png" width="100%" alt="The popup: pick any combination of the five output formats, then Archive.">
+</p>
+
+<p align="center"><em>The popup: pick any combination of the five output formats, then Archive.</em></p>
 A Chrome extension that archives webpages in four formats — all in one click:
 
 | Format | Library | What it captures |
