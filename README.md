@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/icons/icon-128.png" width="96" height="96" alt="Webpage Archiver icon">
+</p>
+
 # Webpage Archiver
 
 <!-- BADGES:START -->
@@ -8,19 +12,34 @@
 
 ## Description
 
+A Manifest V3 Chrome extension that saves the page you are looking at in up to
+five formats with one click: a self-contained HTML file, clean Markdown, a
+full-page PNG, a screenshot PDF and a print PDF with selectable text. By default
+the files arrive as one ZIP in your Downloads folder.
 
+Everything happens inside your browser. Nothing is sent to a server.
 
+## Table of Contents
 
-A Chrome extension that archives webpages in several formats — all in one click:
+- [Description](#description)
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [Archiving a page](#archiving-a-page)
+  - [Keyboard shortcut](#keyboard-shortcut)
+  - [File names](#file-names)
+  - [Markdown output](#markdown-output)
+- [Configuration](#configuration)
+- [Permissions](#permissions)
+- [Limitations](#limitations)
+- [Architecture](#architecture)
+- [Credits](#credits)
+- [Contributing](#contributing)
+- [License](#license)
 
-| Format | Library | What it captures |
-|--------|---------|-----------------|
-| **HTML** | Custom serializer | Full page as a single self-contained HTML file (inlined CSS & images) |
-| **Markdown** | [Readability](https://github.com/mozilla/readability) + [Turndown](https://github.com/mixmark-io/turndown) | Clean article content with YAML frontmatter |
-| **PNG** | [html2canvas](https://html2canvas.hertzen.com/) | Full-page screenshot |
-| **PDF** | [jsPDF](https://github.com/parallax/jsPDF) | Multi-page PDF from the screenshot |
-
-## Screenshot
+## Screenshots
 
 <p align="center">
   <img src="docs/screenshots/popup.png" width="100%" alt="The popup: pick any combination of the five output formats, then Archive.">
@@ -28,53 +47,97 @@ A Chrome extension that archives webpages in several formats — all in one clic
 
 <p align="center"><em>The popup: pick any combination of the five output formats, then Archive.</em></p>
 
-## Prerequisites
+## Features
 
-- **Google Chrome** or any Chromium-based browser (Edge, Brave, Arc) with
-  Manifest V3 support
-- Developer mode enabled at `chrome://extensions` to load it unpacked
-- **Node.js 20+** and npm only if you want to rebuild the bundled dependencies
+| Format | What it captures | How |
+|---|---|---|
+| **HTML** | The whole page as one self-contained file, with stylesheets and images inlined and scripts removed | A custom serializer over the live DOM |
+| **Markdown** | Just the article text, with YAML front matter | [Readability](https://github.com/mozilla/readability) + [Turndown](https://github.com/mixmark-io/turndown) |
+| **PNG** | A full-page screenshot, exactly as the browser rendered it | Scrolls the page, captures each screen and stitches them together |
+| **Screenshot PDF** | The full-page screenshot, split across A4 pages | [jsPDF](https://github.com/parallax/jsPDF) |
+| **Print PDF** | The page as Chrome prints it, with selectable text | Chrome's own `Page.printToPDF` |
+
+- **One click, any combination** of the five formats
+- **One ZIP or separate files**, your choice
+- **A configurable file name** built from the date, site, page title and a
+  timestamp
+- **A keyboard shortcut** that archives with your saved default formats
+- **Markdown that falls back gracefully**: when a page has no recognisable
+  article, the whole body is converted instead
+- **Local only**: no account, no server, no tracking
+
+## Requirements
+
+- **Google Chrome 109** or newer, or another Chromium-based browser (Edge,
+  Brave, Arc) that supports Manifest V3 offscreen documents
+- **Developer mode** turned on at `chrome://extensions`, to load the extension
+  unpacked
+- **Node.js 20+** and npm, only if you want to update the bundled libraries or
+  run the tests. The built libraries are already in `vendor/`.
 
 ## Installation
 
 ```bash
-# Install dependencies and build vendor libraries
-npm install
-npm run build
+git clone https://github.com/geoffmyers/webpage-archiver.git
 ```
 
-Then load as an unpacked extension:
+Then load it into Chrome:
 
-1. Open `chrome://extensions/`
-2. Enable **Developer Mode**
-3. Click **Load unpacked** and select this directory
+1. Open `chrome://extensions`.
+2. Turn on **Developer mode** (top right).
+3. Click **Load unpacked** and choose the `webpage-archiver` folder.
+4. Pin **Webpage Archiver** to the toolbar from the extensions menu.
+
+To rebuild the bundled libraries after changing a dependency:
+
+```bash
+cd webpage-archiver
+npm install
+npm run build        # copies the libraries from node_modules into vendor/
+```
 
 ## Usage
 
-1. Navigate to any webpage you want to archive
-2. Click the Webpage Archiver icon in the toolbar
-3. Select your desired formats (HTML, Markdown, PNG, PDF)
-4. Click **Archive**
-5. Files are saved to your Downloads folder
+### Archiving a page
 
-### Keyboard Shortcut
+1. Open the page you want to keep.
+2. Click the Webpage Archiver icon in the toolbar.
+3. Tick the formats you want: **HTML**, **Markdown**, **PNG**, **Screenshot PDF**
+   and **Print PDF** are all on by default.
+4. Click **Archive**. A progress bar shows each step, then a list of what was
+   saved.
 
-**Ctrl+Shift+S** (Cmd+Shift+S on macOS) — archives the current page using your saved default formats.
+The PNG and screenshot PDF are made by scrolling the page, so leave the tab in
+front until the progress bar finishes.
 
-### File Naming
+### Keyboard shortcut
 
-Output files follow a configurable pattern (default: `{date}_{hostname}_{title}`):
+**Ctrl+Shift+S** (**⌘+Shift+S** on macOS) archives the current tab with the
+formats saved in the options. Change the key at `chrome://extensions/shortcuts`.
+
+### File names
+
+The default pattern is `{date}_{hostname}_{title}`. Spaces become hyphens,
+characters that are not allowed in file names are removed, and names are cut to
+120 characters. For a page titled "Article Title" on `www.example.com`:
 
 ```
-2026-02-17_example.com_Article-Title.html
-2026-02-17_example.com_Article-Title.md
-2026-02-17_example.com_Article-Title.png
-2026-02-17_example.com_Article-Title.pdf
+2026-02-17_example.com_Article-Title.zip        ← default: one ZIP containing
+    2026-02-17_example.com_Article-Title.html
+    2026-02-17_example.com_Article-Title.md
+    2026-02-17_example.com_Article-Title.png
+    2026-02-17_example.com_Article-Title.screenshot.pdf
+    2026-02-17_example.com_Article-Title.print.pdf
 ```
 
-### Markdown Output
+When only one of the two PDF formats is selected, its file is just `.pdf`.
+`{date}` is the UTC date, and a leading `www.` is dropped from `{hostname}`.
 
-The Markdown format extracts just the primary article content (stripping navigation, ads, sidebars, and footers) and includes YAML frontmatter:
+### Markdown output
+
+The Markdown format keeps only the main article, without navigation, ads,
+sidebars or footers, and starts with front matter. Fields the page does not
+provide are left out.
 
 ```markdown
 ---
@@ -86,65 +149,94 @@ excerpt: "A brief summary..."
 siteName: "Example.com"
 ---
 
-# Article Title
-
 Clean article content here...
 ```
 
-## Options
+## Configuration
 
-Access via the **Options** link in the popup or `chrome://extensions` → Webpage Archiver → Details → Extension options.
+Open the options from the **Options** link in the popup, or from
+`chrome://extensions` → Webpage Archiver → Details → Extension options.
 
-- **Default formats** — which formats are pre-selected
-- **Filename pattern** — customizable with `{date}`, `{hostname}`, `{title}`, `{timestamp}`
-- **Subfolder** — save archives in a subfolder within Downloads
+| Setting | Default | What it does |
+|---|---|---|
+| Default formats | All five | Which formats are ticked when the popup opens, and which the shortcut uses |
+| Filename pattern | `{date}_{hostname}_{title}` | Tokens: `{date}`, `{hostname}`, `{title}`, `{timestamp}` (milliseconds since 1970) |
+| Subfolder | *(none)* | Saves into a folder inside Downloads |
+| Bundle all formats into a single ZIP file | On | Off saves each format as a separate download |
+
+Settings are stored with `chrome.storage.sync`, so they follow your Chrome
+profile.
 
 ## Permissions
 
-| Permission | Purpose |
-|-----------|---------|
-| `activeTab` | Access the current tab's content for capture |
-| `scripting` | Inject capture scripts into the page |
-| `downloads` | Save archived files |
-| `storage` | Persist user preferences |
-| `offscreen` | Create offscreen document for PDF generation |
-| `<all_urls>` | Capture any webpage |
+| Permission | Why |
+|---|---|
+| `activeTab`, `<all_urls>` | Read the page you asked to archive |
+| `scripting` | Run the capture script in that page |
+| `downloads` | Save the files |
+| `storage` | Remember your settings |
+| `offscreen` | Stitch screenshots, build the PDF and pack the ZIP; a Manifest V3 service worker has no DOM to do it in |
+| `debugger` | Produce the print PDF through Chrome's `Page.printToPDF`. Chrome shows a "started debugging this browser" bar while it runs |
 
 ## Limitations
 
-- **Non-article pages** (dashboards, SPAs, social feeds): Readability may not extract clean content. Falls back to full-body Markdown conversion.
-- **Cross-origin images**: Cannot be embedded in the HTML archive as data URIs due to browser security restrictions.
-- **Complex CSS**: html2canvas may not perfectly render CSS transforms, animations, shadow DOM, or cross-origin iframes.
-- **Very long pages**: PNG screenshot is capped at 32,000px height. PDF splits long pages across multiple A4-sized pages.
-
-## Dependencies
-
-| Library | Version | License | Purpose |
-|---------|---------|---------|---------|
-| [@mozilla/readability](https://github.com/mozilla/readability) | ^0.6.0 | Apache-2.0 | Article content extraction |
-| [html2canvas](https://html2canvas.hertzen.com/) | ^1.4.1 | MIT | Full-page screenshot |
-| [jsPDF](https://github.com/parallax/jsPDF) | ^4.2.1 | MIT | PDF generation |
-| [turndown](https://github.com/mixmark-io/turndown) | ^7.2.0 | MIT | HTML → Markdown conversion |
-| [turndown-plugin-gfm](https://github.com/mixmark-io/turndown-plugin-gfm) | ^1.0.2 | MIT | GFM table support |
-
-## Credits
-
-Article extraction by [Readability](https://github.com/mozilla/readability)
-(Mozilla). PDF output via [jsPDF](https://github.com/parallax/jsPDF) and
-[html2canvas](https://html2canvas.hertzen.com/); Markdown conversion by
-[Turndown](https://github.com/mixmark-io/turndown) with its GFM plugin;
-archives packed by [JSZip](https://stuk.github.io/jszip/).
+- **Pages without a clear article** (dashboards, single-page apps, social
+  feeds) give Readability nothing to extract, so the Markdown falls back to the
+  whole page body and is noisier.
+- **Cross-origin images** cannot be inlined into the HTML archive because the
+  browser blocks reading them. They keep their original URLs.
+- **Very long pages** are cut off at 32,000 pixels in the PNG and screenshot
+  PDF.
+- **Restricted pages** such as `chrome://` pages and the Chrome Web Store cannot
+  be captured, because Chrome does not let extensions run scripts there.
 
 ## Architecture
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how the project fits together — the
-layout, the data flow, and the constraints worth knowing before changing it.
+```
+popup.js ──► service-worker.js ──► content-script.js (in the page)
+                   │                   HTML serialisation, Readability, Turndown
+                   │
+                   ├──► captureVisibleTab, screen by screen ──► offscreen.js
+                   │                                             stitch PNG, jsPDF, JSZip
+                   ├──► chrome.debugger: Page.printToPDF
+                   └──► chrome.downloads
+```
+
+| Path | Role |
+|---|---|
+| `manifest.json` | Permissions, service worker, popup, options page and shortcut |
+| `src/popup/` | Format picker, progress and results |
+| `src/background/service-worker.js` | Orchestrates a capture: injects the content script, scrolls and screenshots, builds file names, downloads |
+| `src/content/content-script.js` | Runs in the page: HTML and Markdown capture |
+| `src/offscreen/` | DOM work the service worker cannot do: stitching, PDF and ZIP |
+| `src/options/` | Settings page |
+| `vendor/` | Bundled third-party libraries, committed so the extension loads with no build step |
+| `build.js` | Copies those libraries out of `node_modules` |
+| `tests/` | Playwright tests |
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for more detail.
+
+## Credits
+
+| Library | License | Used for |
+|---|---|---|
+| [@mozilla/readability](https://github.com/mozilla/readability) | Apache-2.0 | Finding the article in a page |
+| [Turndown](https://github.com/mixmark-io/turndown) and [turndown-plugin-gfm](https://github.com/mixmark-io/turndown-plugin-gfm) | MIT | HTML to Markdown, including tables |
+| [jsPDF](https://github.com/parallax/jsPDF) | MIT | The screenshot PDF |
+| [JSZip](https://stuk.github.io/jszip/) | MIT or GPL-3.0 | The ZIP bundle |
+| [html2canvas](https://html2canvas.hertzen.com/) | MIT | Still bundled in `vendor/`, but no longer used: screenshots now come from the browser itself |
+| [Playwright](https://playwright.dev/) | Apache-2.0 | Tests |
+
+Chrome is a trademark of Google LLC. This extension is not affiliated with or
+endorsed by Google.
+
+Written by Geoff Myers.
 
 ## Contributing
 
-Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
+Bug reports and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md)
 for setup, checks and how this repository is published.
 
 ## License
 
-This project is licensed under the GNU General Public License v2.0 - see the [LICENSE.md](LICENSE.md) file for details.
+GPL-2.0. See [LICENSE.md](LICENSE.md).
