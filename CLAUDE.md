@@ -96,4 +96,10 @@ npm run build
 - **AGPL-3.0 note**: The original plan called for `single-file-core` (AGPL-3.0) but this implementation uses a custom HTML serializer instead, avoiding the AGPL dependency.
 - **vendor/ directory** contains built files from `npm run build`. Run this after `npm install` or dependency updates.
 - Requires Chrome 109+ (Manifest V3 with offscreen document support)
-- This is a git subtree; push changes upstream with `git subtree push --prefix=google-chrome-extensions/webpage-archiver webpage-archiver main`
+- This is a git subtree. Push upstream with the mandated wrapper:
+  `scripts/safe-subtree-push.sh --prefix=google-chrome-extensions/webpage-archiver --remote=webpage-archiver`
+- **NEVER run `git subtree push` or `git subtree split` directly.** A raw split has
+  twice pushed the entire mono-repo history — and the secrets in it — to a public
+  remote (see `docs/security/2026-02-04-` and `2026-05-12-credential-leak-audit.md`).
+  The wrapper splits to a temp branch, caps the commit count and forces inspection;
+  a pre-push hook refuses the raw command.

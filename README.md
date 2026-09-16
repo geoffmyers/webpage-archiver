@@ -9,6 +9,13 @@ A Chrome extension that archives webpages in four formats — all in one click:
 | **PNG** | [html2canvas](https://html2canvas.hertzen.com/) | Full-page screenshot |
 | **PDF** | [jsPDF](https://github.com/parallax/jsPDF) | Multi-page PDF from the screenshot |
 
+## Prerequisites
+
+- **Google Chrome** or any Chromium-based browser (Edge, Brave, Arc) with
+  Manifest V3 support
+- Developer mode enabled at `chrome://extensions` to load it unpacked
+- **Node.js 20+** and npm only if you want to rebuild the bundled dependencies
+
 ## Installation
 
 ```bash
@@ -100,6 +107,20 @@ Access via the **Options** link in the popup or `chrome://extensions` → Webpag
 | [jsPDF](https://github.com/parallax/jsPDF) | ^2.5.2 | MIT | PDF generation |
 | [turndown](https://github.com/mixmark-io/turndown) | ^7.2.0 | MIT | HTML → Markdown conversion |
 | [turndown-plugin-gfm](https://github.com/mixmark-io/turndown-plugin-gfm) | ^1.0.2 | MIT | GFM table support |
+
+## Credits
+
+Article extraction by [Readability](https://github.com/mozilla/readability)
+(Mozilla). PDF output via [jsPDF](https://github.com/parallax/jsPDF) and
+[html2canvas](https://html2canvas.hertzen.com/); Markdown conversion by
+[Turndown](https://github.com/mixmark-io/turndown) with its GFM plugin;
+archives packed by [JSZip](https://stuk.github.io/jszip/).
+
+## Contributing
+
+Bug reports and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
+for setup, checks and how this repository is published, and
+[ARCHITECTURE.md](ARCHITECTURE.md) for how the project fits together.
 
 ## License
 

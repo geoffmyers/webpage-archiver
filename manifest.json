@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "description": "Archive webpages as PDF, PNG, single-file HTML, and clean Markdown — all in one click",
   "author": "Geoff Myers",
-  "homepage_url": "https://github.com/geoffmyers/geoff-myers-mono-repo",
+  "homepage_url": "https://github.com/geoffmyers/webpage-archiver",
 
   "permissions": [
     "activeTab",
