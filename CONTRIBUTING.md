@@ -45,7 +45,8 @@ jq -r .version manifest.json
 ```
 
 and, if `v<version>` has no release yet, builds these and publishes them as
-a GitHub Release. To release, raise the version.
+a [GitHub Release](https://github.com/geoffmyers/webpage-archiver/releases).
+To release, raise the version.
 
 - **Chrome extension** (Node.js 22): `*.zip`
 

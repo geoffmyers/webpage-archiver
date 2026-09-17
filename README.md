@@ -6,6 +6,7 @@
 
 <!-- BADGES:START -->
 ![Chrome Extension MV3](https://img.shields.io/badge/Chrome%20Extension-MV3-4285F4?style=flat-square&logo=googlechrome)
+[![Latest release](https://img.shields.io/github/v/release/geoffmyers/webpage-archiver?style=flat-square&logo=github&label=release)](https://github.com/geoffmyers/webpage-archiver/releases/latest)
 [![Licence GPL-3.0-or-later](https://img.shields.io/badge/licence-GPL--3.0--or--later-blue?style=flat-square)](LICENSE.md)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square)](CONTRIBUTING.md)
 <!-- BADGES:END -->
