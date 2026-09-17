@@ -5,6 +5,28 @@ const fs = require('fs');
 
 const EXTENSION_PATH = path.resolve(__dirname, '..');
 
+/**
+ * The extension's service worker, however fast or slow Chromium starts it.
+ * Checking context.serviceWorkers() and then waiting for the 'serviceworker'
+ * event misses a worker that starts between the two calls, and a busy host
+ * can take longer than 10 s; both failed a publish (2026-09-17). Poll instead.
+ */
+async function extensionServiceWorker(context, timeoutMs = 30000) {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const [worker] = context.serviceWorkers();
+    if (worker) return worker;
+    if (Date.now() > deadline) {
+      throw new Error(`extension service worker did not start within ${timeoutMs / 1000} s`);
+    }
+    try {
+      return await context.waitForEvent('serviceworker', { timeout: 1000 });
+    } catch {
+      // not yet: loop and look again
+    }
+  }
+}
+
 // ─── Structural / Static Validation Tests ─────────────────────────────────────
 
 test.describe('Extension Structure', () => {
@@ -21,7 +43,9 @@ test.describe('Extension Structure', () => {
     expect(manifest.version).toMatch(/^\d+(\.\d+){0,3}$/);
     const pkg = JSON.parse(fs.readFileSync(path.join(EXTENSION_PATH, 'package.json'), 'utf-8'));
     expect(manifest.version).toBe(pkg.version);
-    expect(manifest.permissions).toContain('activeTab');
+    // activeTab is deliberately absent: host_permissions already grants
+    // <all_urls> permanently, so activeTab's per-click grant is redundant.
+    expect(manifest.permissions).not.toContain('activeTab');
     expect(manifest.permissions).toContain('scripting');
     expect(manifest.permissions).toContain('downloads');
     expect(manifest.permissions).toContain('storage');
@@ -61,7 +85,6 @@ test.describe('Extension Structure', () => {
   test('all vendor libraries exist', () => {
     const vendorFiles = [
       'vendor/Readability.js',
-      'vendor/html2canvas.min.js',
       'vendor/jspdf.umd.min.js',
       'vendor/jszip.min.js',
       'vendor/turndown.umd.js',
@@ -81,6 +104,7 @@ test.describe('Extension Structure', () => {
       'vendor/Readability.js',
       'vendor/turndown.umd.js',
       'vendor/turndown-plugin-gfm.js',
+      'src/content/html-sanitizer.js',
       'src/content/content-script.js',
     ];
 
@@ -132,7 +156,6 @@ test.describe('Extension Structure', () => {
     const deps = pkg.dependencies || {};
 
     expect(deps['@mozilla/readability']).toBeDefined();
-    expect(deps['html2canvas']).toBeDefined();
     expect(deps['jspdf']).toBeDefined();
     expect(deps['turndown']).toBeDefined();
     expect(deps['turndown-plugin-gfm']).toBeDefined();
@@ -350,14 +373,6 @@ test.describe('Vendor Library Validation', () => {
     expect(code).toContain('parse');
   });
 
-  test('html2canvas exposes global function', () => {
-    const code = fs.readFileSync(
-      path.join(EXTENSION_PATH, 'vendor/html2canvas.min.js'),
-      'utf-8'
-    );
-    expect(code).toContain('html2canvas');
-  });
-
   test('turndown exposes TurndownService', () => {
     const code = fs.readFileSync(
       path.join(EXTENSION_PATH, 'vendor/turndown.umd.js'),
@@ -412,12 +427,7 @@ test.describe('Extension Loading in Browser', () => {
     });
 
     // Wait for service worker to register and get extension ID
-    let serviceWorker;
-    if (context.serviceWorkers().length > 0) {
-      serviceWorker = context.serviceWorkers()[0];
-    } else {
-      serviceWorker = await context.waitForEvent('serviceworker', { timeout: 10000 });
-    }
+    const serviceWorker = await extensionServiceWorker(context);
     extensionId = serviceWorker.url().split('/')[2];
   });
 
@@ -651,18 +661,19 @@ test.describe('Extension Loading in Browser', () => {
     const page = await context.newPage();
     await page.goto('https://example.com', { waitUntil: 'domcontentloaded' });
 
-    // Execute the serialization functions directly
-    const html = await page.evaluate(() => {
-      // Simplified version of serializeHtml for testing
-      const docClone = document.cloneNode(true);
+    // Load the REAL sanitizer/serializer (not a reimplementation) and call it
+    // directly — html-sanitizer.js has no chrome.* dependency, so it can be
+    // injected into a plain page exactly as it is into the archived tab.
+    const sanitizerCode = fs.readFileSync(
+      path.join(EXTENSION_PATH, 'src/content/html-sanitizer.js'),
+      'utf-8'
+    );
+    await page.evaluate(sanitizerCode);
 
-      // Remove scripts
-      const scripts = docClone.querySelectorAll('script');
-      scripts.forEach((s) => s.remove());
-
-      // Get serialized HTML
-      return '<!DOCTYPE html>\n' + docClone.documentElement.outerHTML;
-    });
+    const html = await page.evaluate(() =>
+      // eslint-disable-next-line no-undef
+      serializeHtml('https://example.com/', 'Example Domain')
+    );
 
     expect(html).toContain('<!DOCTYPE html>');
     expect(html).toContain('<html');
@@ -706,5 +717,140 @@ test.describe('Extension Loading in Browser', () => {
 
     await popupPage.close();
     await page.close();
+  });
+
+  test('serializeHtml strips scripts, event handlers, javascript: URLs, iframes and meta refresh, and carries the provenance comment', async () => {
+    const page = await context.newPage();
+
+    // The fixture below is a LIVE page as far as this browser is concerned:
+    // its meta refresh and iframe/object/embed src attributes would
+    // otherwise really navigate/fetch. Block all network requests so the
+    // meta refresh can't tear down the execution context out from under the
+    // evaluate() calls below — we're testing what serializeHtml() strips
+    // from the DOM, not the browser's own handling of the hostile markup.
+    await page.route('**/*', (route) => route.abort());
+
+    // A hostile page: inline handlers, javascript:/vbscript:/data:text/html
+    // URLs (including whitespace-obfuscated ones), a meta refresh, a real
+    // <iframe>/<object>/<embed>, resource-hint links that would pull in more
+    // script, a page-supplied <base> trying to redirect our relative-URL
+    // resolution, and a <noscript> block whose own content carries a handler.
+    await page.setContent(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Hostile fixture</title>
+  <!-- A huge delay: real enough for the sanitizer to find and remove, but
+       this browser must never actually act on it mid-test. -->
+  <meta http-equiv="refresh" content="9999;url=https://evil.example/">
+  <base href="https://evil.example/redirect-base/">
+  <link rel="modulepreload" href="https://evil.example/mod.js">
+  <link rel="preload" as="script" href="https://evil.example/pre.js">
+  <script>window.__hostileScriptRan = true;</script>
+</head>
+<body onload="window.__bodyOnload = true;">
+  <img src="https://example.com/nope.png" onerror="window.__imgOnerror = true;">
+  <a href="javascript:alert(1)" id="jslink">click</a>
+  <a href="  JaVaScRiPt:alert(2)" id="jslink2">click2</a>
+  <a href="vbscript:msgbox(1)" id="vbslink">click3</a>
+  <a href="data:text/html,<script>alert(1)</script>" id="datalink">click4</a>
+  <iframe src="https://evil.example/frame"></iframe>
+  <object data="https://evil.example/obj"></object>
+  <embed src="https://evil.example/embed">
+  <form action="javascript:alert(3)"><button formaction="javascript:alert(4)">go</button></form>
+  <div onclick="window.__divClicked = true;">click me</div>
+  <noscript><img src="x" onerror="window.__noscriptRan = true;"></noscript>
+  <p>Some real, harmless content that should survive.</p>
+</body>
+</html>`);
+
+    const sanitizerCode = fs.readFileSync(
+      path.join(EXTENSION_PATH, 'src/content/html-sanitizer.js'),
+      'utf-8'
+    );
+    await page.evaluate(sanitizerCode);
+
+    // The pageTitle argument (distinct from the fixture's own <title> tag,
+    // above) carries a comment-close attempt of its own: a page whose title
+    // or URL contains "-->" must not be able to break out of the provenance
+    // comment.
+    const hostileArgTitle = 'Injected--><p id="escaped">should not render as markup</p><!--';
+    const html = await page.evaluate(
+      (title) =>
+        // eslint-disable-next-line no-undef
+        serializeHtml('https://example.test/hostile', title),
+      hostileArgTitle
+    );
+
+    // Nothing that can execute survived
+    expect(html).not.toMatch(/<script/i);
+    expect(html).not.toMatch(/<noscript/i);
+    expect(html).not.toMatch(/<iframe/i);
+    expect(html).not.toMatch(/<object/i);
+    expect(html).not.toMatch(/<embed/i);
+    expect(html).not.toMatch(/\son\w+\s*=/i); // no on* attribute anywhere
+    expect(html).not.toMatch(/javascript:/i);
+    expect(html).not.toMatch(/vbscript:/i);
+    expect(html).not.toMatch(/data:text\/html/i);
+    expect(html).not.toMatch(/http-equiv=["']refresh["']/i);
+    expect(html).not.toMatch(/rel=["']modulepreload["']/i);
+    expect(html).not.toMatch(/evil\.example/i); // the hostile origin appears nowhere
+
+    // Our own <base> won — the page's own <base> pointing at evil.example
+    // was removed rather than merely overwritten.
+    const baseMatches = html.match(/<base\b[^>]*>/gi) || [];
+    expect(baseMatches.length).toBe(1);
+    expect(baseMatches[0]).toContain('https://example.test/hostile');
+
+    // The restrictive CSP meta tag is present
+    expect(html).toMatch(/Content-Security-Policy/i);
+    expect(html).toContain("default-src 'none'");
+
+    // The provenance comment survived (it has to live inside <html>, since
+    // only documentElement.outerHTML is returned).
+    expect(html).toContain('Archived by Webpage Archiver');
+    expect(html).toContain('example.test/hostile');
+    expect(html).toContain('Some real, harmless content that should survive.');
+
+    // The hostile title's "-->" plus injected <p id="escaped"> must never
+    // become a real element — only inert text inside the provenance
+    // comment. A raw substring match can't tell "present as comment text"
+    // from "present as markup", so reparse the archive's own output the way
+    // a browser opening the saved file would.
+    const injectionBecameReal = await page.evaluate((htmlText) => {
+      const reparsed = new DOMParser().parseFromString(htmlText, 'text/html');
+      return reparsed.getElementById('escaped') !== null;
+    }, html);
+    expect(injectionBecameReal).toBe(false);
+
+    await page.close();
+  });
+
+  test('popup shows a GitHub source link', async () => {
+    const popupPage = await context.newPage();
+    await popupPage.goto(`chrome-extension://${extensionId}/src/popup/popup.html`);
+
+    const link = popupPage.locator('a[href="https://github.com/geoffmyers/webpage-archiver"]');
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
+    await expect(link).toContainText('View source on GitHub');
+    expect(await link.locator('svg').count()).toBe(1);
+
+    await popupPage.close();
+  });
+
+  test('options page shows a GitHub source link', async () => {
+    const optionsPage = await context.newPage();
+    await optionsPage.goto(`chrome-extension://${extensionId}/src/options/options.html`);
+
+    const link = optionsPage.locator('a[href="https://github.com/geoffmyers/webpage-archiver"]');
+    await expect(link).toBeVisible();
+    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('rel', /noopener/);
+    await expect(link).toContainText('View source on GitHub');
+    expect(await link.locator('svg').count()).toBe(1);
+
+    await optionsPage.close();
   });
 });

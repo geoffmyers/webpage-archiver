@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-A Chrome extension (Manifest V3) that archives webpages in four formats — single-file HTML, clean Markdown, full-page PNG screenshot, and PDF — all in one click. Uses Readability for content extraction, Turndown for Markdown conversion, html2canvas for screenshots, and jsPDF for PDF generation.
+A Chrome extension (Manifest V3) that archives webpages in several formats — single-file HTML, clean Markdown, full-page PNG screenshot, and PDF — all in one click. Uses Readability for content extraction, Turndown for Markdown conversion, `chrome.tabs.captureVisibleTab` (stitched across scroll positions) for screenshots, and jsPDF for PDF generation.
 
 ## Architecture / Key Files
 
@@ -12,7 +12,6 @@ package.json                     - Dependencies (vendored libraries)
 build.js                         - Copies vendor libs from node_modules to vendor/
 vendor/                          - Bundled vendor libraries (built from node_modules)
   Readability.js                 - Mozilla Readability (@mozilla/readability)
-  html2canvas.min.js             - DOM-to-canvas screenshot (html2canvas)
   jspdf.umd.min.js               - PDF generation (jsPDF)
   turndown.umd.js                - HTML-to-Markdown (turndown)
   turndown-plugin-gfm.js         - GitHub Flavored Markdown tables (turndown-plugin-gfm)
@@ -24,7 +23,8 @@ src/
   background/
     service-worker.js            - Orchestrates capture: injects scripts, manages downloads, offscreen doc
   content/
-    content-script.js            - Injected into page; captures HTML, PNG, Markdown from DOM
+    content-script.js            - Injected into page; orchestrates capture, Markdown from DOM
+    html-sanitizer.js            - Injected alongside content-script.js; builds the sanitized single-file HTML archive (no chrome.* calls, so tests can load it directly)
   offscreen/
     offscreen.html               - Offscreen document for PDF generation (MV3 requirement)
     offscreen.js                 - jsPDF rendering (receives screenshot, outputs PDF data URL)
@@ -39,10 +39,10 @@ assets/icons/                    - Extension icons (16, 32, 48, 128px), rendered
 1. User clicks popup → selects formats → clicks "Archive"
 2. `popup.js` sends `{ type: 'archive', formats }` to service worker
 3. `service-worker.js` injects vendor libs + `content-script.js` into active tab
-4. `content-script.js` captures:
-   - **HTML**: Clones DOM, inlines stylesheets/images, removes scripts, adds base href
+4. `content-script.js` and `html-sanitizer.js` capture:
+   - **HTML**: `html-sanitizer.js` clones the DOM, inlines stylesheets/images, strips scripts/event handlers/dangerous URLs/iframes/embeds/meta-refresh, adds its own base href and a restrictive CSP
    - **Markdown**: Readability extracts article → Turndown converts to Markdown with YAML frontmatter
-   - **PNG**: html2canvas renders full page to canvas → data URL
+   - **PNG**: `service-worker.js` scrolls the tab and calls `chrome.tabs.captureVisibleTab` per viewport, stitched in the offscreen document
 5. For **PDF**: service worker opens offscreen document → jsPDF converts screenshot to multi-page PDF
 6. All files downloaded via `chrome.downloads` API with configurable naming pattern
 
@@ -75,24 +75,20 @@ npm run build
 
 - **Add a new output format**: Add capture logic in `content-script.js`, processing in `service-worker.js`, checkbox in `popup.html`/`options.html`
 - **Change filename pattern**: Edit the `buildFilename()` function in `service-worker.js` or change defaults in `options.js`
-- **Improve screenshot fidelity**: Adjust `html2canvas` options in `content-script.js` `captureScreenshot()`
+- **Improve screenshot fidelity**: Adjust `captureFullPageScreenshot()` in `service-worker.js` (scroll delay, retry backoff) or the stitch logic in `offscreen.js`
 - **Improve Markdown quality**: Customize `TurndownService` rules in `content-script.js` `createTurndownService()`
 - **Change PDF layout**: Edit `generatePdf()` in `offscreen.js` (page size, margins, multi-page logic)
 
 ## Gotchas
 
 - **Readability returns null** on non-article pages (dashboards, SPAs, social feeds). The extension falls back to converting the full body HTML to Markdown.
-- **html2canvas has fidelity limits** — CSS transforms, shadow DOM, and cross-origin iframes may not render correctly. Canvas size is capped at 32000px height.
+- **The stitched screenshot canvas is capped at 32000px height** (`offscreen.js` `stitch-init`). A page taller than that (after scaling by `devicePixelRatio`) gets a truncated PNG/PDF; `service-worker.js` detects this and appends a note to the result label so it isn't silent.
+- **`html-sanitizer.js` has no `chrome.*` dependency on purpose** — it's injected into the page alongside `content-script.js` (same isolated world, so `serializeHtml()` is a shared global), and the Playwright suite also loads it directly into a plain page to exercise the real function instead of a reimplementation.
 - **Cross-origin images** cannot be inlined as data URIs in the HTML archive. They keep their original `src` URLs.
 - **Offscreen document** is required by MV3 for jsPDF since service workers can't access DOM APIs. The offscreen doc is created on-demand and reused.
 - **AGPL-3.0 note**: The original plan called for `single-file-core` (AGPL-3.0) but this implementation uses a custom HTML serializer instead, avoiding the AGPL dependency.
 - **vendor/ directory** contains built files from `npm run build`. Run this after `npm install` or dependency updates.
 - Requires Chrome 109+ (Manifest V3 with offscreen document support)
-- This project is published to GitHub (`geoffmyers/webpage-archiver`) as a snapshot.
-  Each publish appends one commit to the public history. Publish with:
-  `scripts/publish-subtree-snapshot.sh --prefix=google-chrome-extensions/webpage-archiver --publish`
-  Exclusions and GitHub metadata are declared in `scripts/subtree-publish.json`.
-- **NEVER run `git subtree push` or `git subtree split`.** A raw split has twice
-  pushed the entire mono-repo history — and the secrets in it — to a public remote
-  (see `docs/security/2026-02-04-` and `2026-05-12-credential-leak-audit.md`). A
-  pre-push hook refuses it.
+- This project is developed in a private repository and published to
+  GitHub (`geoffmyers/webpage-archiver`) as a snapshot: each publish adds one commit.
+  Pull requests are applied upstream first; see CONTRIBUTING.md.

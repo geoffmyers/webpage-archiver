@@ -3,11 +3,11 @@
 /**
  * Content script: captures page content in multiple formats.
  *
- * Injected vendor globals:
+ * Injected alongside this file, in the same isolated world:
  *   - Readability       (from @mozilla/readability)
- *   - html2canvas       (from html2canvas)
  *   - TurndownService   (from turndown)
  *   - turndownPluginGfm (from turndown-plugin-gfm)
+ *   - serializeHtml()   (from html-sanitizer.js — the HTML archive format)
  *
  * Responds to messages from the service worker:
  *   { type: 'capture', formats: { html, png, markdown, pdf } }
@@ -70,98 +70,9 @@ async function capturePage(formats, pageUrl, pageTitle) {
 }
 
 // ─── HTML Serialization ──────────────────────────────────────────────────────
-
-function serializeHtml(pageUrl, pageTitle) {
-  const docClone = document.cloneNode(true);
-
-  // Inline all stylesheets as <style> blocks
-  const styleSheets = Array.from(document.styleSheets);
-  const inlinedStyles = [];
-
-  for (const sheet of styleSheets) {
-    try {
-      const rules = Array.from(sheet.cssRules || []);
-      const css = rules.map((r) => r.cssText).join('\n');
-      if (css) inlinedStyles.push(css);
-    } catch {
-      // Cross-origin stylesheet — try to keep the <link> reference
-      if (sheet.href) {
-        inlinedStyles.push(`/* External stylesheet: ${sheet.href} */`);
-      }
-    }
-  }
-
-  // Remove existing <link rel="stylesheet"> and add inlined styles
-  const links = docClone.querySelectorAll('link[rel="stylesheet"]');
-  links.forEach((link) => link.remove());
-
-  if (inlinedStyles.length > 0) {
-    const styleEl = docClone.createElement('style');
-    styleEl.textContent = inlinedStyles.join('\n\n');
-    const head = docClone.querySelector('head') || docClone.documentElement;
-    head.appendChild(styleEl);
-  }
-
-  // Remove scripts (not useful in an archive)
-  const scripts = docClone.querySelectorAll('script');
-  scripts.forEach((s) => s.remove());
-
-  // Inline images as data URIs where possible
-  inlineImages(docClone);
-
-  // Add archive metadata
-  const metaComment = docClone.createComment(
-    `\n  Archived by Webpage Archiver\n  URL: ${pageUrl}\n  Title: ${pageTitle}\n  Date: ${new Date().toISOString()}\n`
-  );
-  docClone.insertBefore(metaComment, docClone.firstChild);
-
-  // Add base href so relative URLs resolve
-  let base = docClone.querySelector('base');
-  if (!base) {
-    base = docClone.createElement('base');
-    const head = docClone.querySelector('head');
-    if (head) head.prepend(base);
-  }
-  base.setAttribute('href', pageUrl);
-
-  return '<!DOCTYPE html>\n' + docClone.documentElement.outerHTML;
-}
-
-function inlineImages(docClone) {
-  const images = docClone.querySelectorAll('img');
-  const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
-
-  for (const img of images) {
-    // Find the corresponding image in the live DOM
-    const liveImg = findLiveImage(img);
-    if (!liveImg || !liveImg.complete || liveImg.naturalWidth === 0) continue;
-
-    try {
-      canvas.width = liveImg.naturalWidth;
-      canvas.height = liveImg.naturalHeight;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(liveImg, 0, 0);
-      const dataUrl = canvas.toDataURL('image/png');
-      img.setAttribute('src', dataUrl);
-      img.removeAttribute('srcset');
-      img.removeAttribute('data-src');
-      img.removeAttribute('loading');
-    } catch {
-      // Cross-origin image — keep original src
-    }
-  }
-}
-
-function findLiveImage(clonedImg) {
-  // Match by src, data attributes, or position
-  const src = clonedImg.getAttribute('src');
-  if (src) {
-    const match = document.querySelector(`img[src="${CSS.escape(src)}"]`);
-    if (match) return match;
-  }
-  return null;
-}
+//
+// serializeHtml() (plus its sanitization helpers) lives in html-sanitizer.js,
+// injected alongside this file so it can also be loaded standalone by tests.
 
 // ─── Markdown Extraction ─────────────────────────────────────────────────────
 

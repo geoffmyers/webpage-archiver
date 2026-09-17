@@ -15,10 +15,6 @@ if (!fs.existsSync(VENDOR_DIR)) {
 
 const copies = [
   {
-    src: 'node_modules/html2canvas/dist/html2canvas.min.js',
-    dest: 'vendor/html2canvas.min.js',
-  },
-  {
     src: 'node_modules/jspdf/dist/jspdf.umd.min.js',
     dest: 'vendor/jspdf.umd.min.js',
   },

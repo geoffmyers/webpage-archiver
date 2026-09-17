@@ -122,6 +122,7 @@ async function injectContentScript(tabId) {
       'vendor/Readability.js',
       'vendor/turndown.umd.js',
       'vendor/turndown-plugin-gfm.js',
+      'src/content/html-sanitizer.js',
       'src/content/content-script.js',
     ],
   });
@@ -129,10 +130,16 @@ async function injectContentScript(tabId) {
 
 // ─── Full-page screenshot via scroll + captureVisibleTab ─────────────────────
 
+// The offscreen document's stitch canvas is capped at this height (see
+// stitch-init in offscreen.js) — a taller page's screenshot, and any PDF
+// made from it, is cut off rather than failing outright.
+const CAPTURE_HEIGHT_LIMIT_PX = 32000;
+
 async function captureFullPageScreenshot(tabId) {
   // Get page dimensions from content script
   const dims = await chrome.tabs.sendMessage(tabId, { type: 'get-page-dimensions' });
   const { scrollHeight, viewportWidth, viewportHeight, devicePixelRatio } = dims;
+  const truncated = Math.round(scrollHeight * devicePixelRatio) > CAPTURE_HEIGHT_LIMIT_PX;
 
   await ensureOffscreenDocument();
 
@@ -145,6 +152,7 @@ async function captureFullPageScreenshot(tabId) {
       png: dataUrl,
       pageWidth: viewportWidth,
       pageHeight: scrollHeight,
+      truncated: false,
     };
   }
 
@@ -202,6 +210,7 @@ async function captureFullPageScreenshot(tabId) {
     png: stitchResponse.blobUrl,
     pageWidth: viewportWidth,
     pageHeight: scrollHeight,
+    truncated,
   };
 }
 
@@ -348,7 +357,10 @@ async function archivePage(formats) {
         const base64 = screenshotData.png.replace(/^data:[^;]+;base64,/, '');
         files.push({ filename, data: base64, type: 'base64' });
       }
-      results.push({ label: `PNG — ${filename}`, success: true });
+      const note = screenshotData.truncated
+        ? ` (page is longer than the ${CAPTURE_HEIGHT_LIMIT_PX.toLocaleString()}px capture limit — cut off)`
+        : '';
+      results.push({ label: `PNG — ${filename}${note}`, success: true });
     } catch (err) {
       results.push({ label: `PNG — ${err.message}`, success: false });
     }
@@ -373,7 +385,10 @@ async function archivePage(formats) {
         const ext = needsPrintPdf ? 'screenshot.pdf' : 'pdf';
         const filename = await buildFilename(pageTitle, pageUrl, ext);
         files.push({ filename, data: pdfResponse.blobUrl, type: 'blob-url' });
-        results.push({ label: `Screenshot PDF — ${filename}`, success: true });
+        const note = screenshotData?.truncated
+          ? ` (page is longer than the ${CAPTURE_HEIGHT_LIMIT_PX.toLocaleString()}px capture limit — cut off)`
+          : '';
+        results.push({ label: `Screenshot PDF — ${filename}${note}`, success: true });
       } else {
         results.push({ label: 'Screenshot PDF — generation failed', success: false });
       }

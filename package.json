@@ -1,6 +1,6 @@
 {
   "name": "webpage-archiver",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "license": "GPL-3.0-or-later",
   "private": true,
   "description": "Chrome extension to archive webpages as PDF, PNG, HTML, and Markdown",
@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
-    "html2canvas": "^1.4.1",
     "jspdf": "^4.2.1",
     "jszip": "^3.10.1",
     "turndown": "^7.2.0",
@@ -19,5 +18,9 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2"
+  },
+  "overrides": {
+    "dompurify": "^3.4.9",
+    "fflate": "^0.8.3"
   }
 }

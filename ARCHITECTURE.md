@@ -16,10 +16,14 @@ extension's own context; nothing is sent to a server.
 ## How a capture works
 
 1. A content script reads the live DOM (after scripts have run, so dynamic pages
-   capture as seen).
+   capture as seen). A separate, chrome-API-free module sanitizes and
+   serializes the single-file HTML archive so it stays inert if ever opened
+   from disk.
 2. **Readability** extracts the article body for the text formats.
-3. **Turndown** converts HTML to Markdown; **html2canvas** plus **jsPDF** render
-   the visual formats; **JSZip** packs multi-file output.
+3. **Turndown** converts HTML to Markdown; the browser's own
+   `captureVisibleTab` (stitched across scroll positions in the offscreen
+   document) plus **jsPDF** render the visual formats; **JSZip** packs
+   multi-file output.
 4. The result is handed to the downloads API.
 
 ## Notes

@@ -164,6 +164,24 @@ h1 {
   font-size: 12px;
 }
 
-.footer a:hover {
+.footer a:hover,
+.footer a:focus-visible {
   color: #2563eb;
+}
+
+.footer-sep {
+  color: #d1d5db;
+  margin: 0 6px;
+  font-size: 12px;
+}
+
+.gh-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  vertical-align: middle;
+}
+
+.gh-link svg {
+  flex-shrink: 0;
 }

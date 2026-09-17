@@ -52,7 +52,7 @@ Everything happens inside your browser. Nothing is sent to a server.
 
 | Format | What it captures | How |
 |---|---|---|
-| **HTML** | The whole page as one self-contained file, with stylesheets and images inlined and scripts removed | A custom serializer over the live DOM |
+| **HTML** | The whole page as one self-contained file, with stylesheets and images inlined and everything that could run code (scripts, event handlers, `javascript:`/`data:text/html` URLs, iframes, embeds, meta refreshes) stripped, plus a restrictive CSP so the file stays inert if opened from disk | A custom sanitizing serializer over the live DOM |
 | **Markdown** | Just the article text, with YAML front matter | [Readability](https://github.com/mozilla/readability) + [Turndown](https://github.com/mixmark-io/turndown) |
 | **PNG** | A full-page screenshot, exactly as the browser rendered it | Scrolls the page, captures each screen and stitches them together |
 | **Screenshot PDF** | The full-page screenshot, split across A4 pages | [jsPDF](https://github.com/parallax/jsPDF) |
@@ -176,7 +176,7 @@ profile.
 
 | Permission | Why |
 |---|---|
-| `activeTab`, `<all_urls>` | Read the page you asked to archive |
+| `<all_urls>` (a host permission, not listed under `permissions`) | Read the page you asked to archive |
 | `scripting` | Run the capture script in that page |
 | `downloads` | Save the files |
 | `storage` | Remember your settings |
@@ -191,7 +191,7 @@ profile.
 - **Cross-origin images** cannot be inlined into the HTML archive because the
   browser blocks reading them. They keep their original URLs.
 - **Very long pages** are cut off at 32,000 pixels in the PNG and screenshot
-  PDF.
+  PDF. The results list says so when it happens.
 - **Restricted pages** such as `chrome://` pages and the Chrome Web Store cannot
   be captured, because Chrome does not let extensions run scripts there.
 
@@ -212,7 +212,8 @@ popup.js ──► service-worker.js ──► content-script.js (in the page)
 | `manifest.json` | Permissions, service worker, popup, options page and shortcut |
 | `src/popup/` | Format picker, progress and results |
 | `src/background/service-worker.js` | Orchestrates a capture: injects the content script, scrolls and screenshots, builds file names, downloads |
-| `src/content/content-script.js` | Runs in the page: HTML and Markdown capture |
+| `src/content/content-script.js` | Runs in the page: orchestrates capture, Markdown extraction |
+| `src/content/html-sanitizer.js` | Runs in the page: builds the sanitized single-file HTML archive (no `chrome.*` calls, so it can also be loaded directly by tests) |
 | `src/offscreen/` | DOM work the service worker cannot do: stitching, PDF and ZIP |
 | `src/options/` | Settings page |
 | `vendor/` | Bundled third-party libraries, committed so the extension loads with no build step |
@@ -229,7 +230,6 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for more detail.
 | [Turndown](https://github.com/mixmark-io/turndown) and [turndown-plugin-gfm](https://github.com/mixmark-io/turndown-plugin-gfm) | MIT | HTML to Markdown, including tables |
 | [jsPDF](https://github.com/parallax/jsPDF) | MIT | The screenshot PDF |
 | [JSZip](https://stuk.github.io/jszip/) | MIT or GPL-3.0 | The ZIP bundle |
-| [html2canvas](https://html2canvas.hertzen.com/) | MIT | Still bundled in `vendor/`, but no longer used: screenshots now come from the browser itself |
 | [Playwright](https://playwright.dev/) | Apache-2.0 | Tests |
 
 The icon, in the extension and here, is the [Font Awesome](https://fontawesome.com/)
